@@ -110,29 +110,44 @@ async def list_schemas() -> ResponseType:
         return format_error_response(str(e))
 
 
-@mcp.tool(description="List objects in a schema")
+@mcp.tool(description="List objects in a schema with comments")
 async def list_objects(
     schema_name: str = Field(description="Schema name"),
-    object_type: str = Field(description="Object type: 'table', 'view', 'sequence', or 'extension'", default="table"),
+    object_type: str = Field(description="Object type: 'table', 'view', 'sequence','function', 'stored procedure', or 'extension'", default="table"),
 ) -> ResponseType:
-    """List objects of a given type in a schema."""
+    """List objects of a given type in a schema, including object-level comments."""
     try:
         sql_driver = await get_sql_driver()
 
         if object_type in ("table", "view"):
-            table_type = "BASE TABLE" if object_type == "table" else "VIEW"
+            # Use pg_catalog so we can fetch comments via obj_description(pg_class.oid, 'pg_class')
+            relkinds = ("'r'",) if object_type == "table" else ("'v'",)  # 'r' table, 'v' view
             rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
-                """
-                SELECT table_schema, table_name, table_type
-                FROM information_schema.tables
-                WHERE table_schema = {} AND table_type = {}
-                ORDER BY table_name
+                f"""
+                SELECT
+                  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' ELSE c.relkind::text END AS object_type,
+                  n.nspname AS table_schema,
+                  c.relname AS table_name,
+                  d.description AS comment
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                WHERE n.nspname = {{}} AND c.relkind IN ({", ".join(relkinds)})
+                ORDER BY c.relname
                 """,
-                [schema_name, table_type],
+                [schema_name],
             )
             objects = (
-                [{"schema": row.cells["table_schema"], "name": row.cells["table_name"], "type": row.cells["table_type"]} for row in rows]
+                [
+                    {
+                        "schema": row.cells["table_schema"],
+                        "name": row.cells["table_name"],
+                        "type": row.cells["object_type"],
+                        "comment": row.cells["comment"],
+                    }
+                    for row in (rows or [])
+                ]
                 if rows
                 else []
             )
@@ -141,15 +156,24 @@ async def list_objects(
             rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
                 """
-                SELECT sequence_schema, sequence_name, data_type
-                FROM information_schema.sequences
-                WHERE sequence_schema = {}
-                ORDER BY sequence_name
+                SELECT
+                  'sequence' AS object_type,
+                  n.nspname AS sequence_schema,
+                  c.relname  AS sequence_name,
+                  d.description AS comment
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                WHERE n.nspname = {} AND c.relkind = 'S'
+                ORDER BY c.relname
                 """,
                 [schema_name],
             )
             objects = (
-                [{"schema": row.cells["sequence_schema"], "name": row.cells["sequence_name"], "data_type": row.cells["data_type"]} for row in rows]
+                [{"schema": row.cells["sequence_schema"],
+                    "name": row.cells["sequence_name"],
+                    "type": row.cells["object_type"],
+                    "comment": row.cells["comment"]} for row in rows]
                 if rows
                 else []
             )
@@ -158,17 +182,52 @@ async def list_objects(
             # Extensions are not schema-specific
             rows = await sql_driver.execute_query(
                 """
-                SELECT extname, extversion, extrelocatable
-                FROM pg_extension
-                ORDER BY extname
+                SELECT
+                  e.extname AS name,
+                  e.extversion AS version,
+                  e.extrelocatable AS relocatable,
+                  d.description AS comment
+                FROM pg_catalog.pg_extension e
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = e.oid AND d.objsubid = 0
+                ORDER BY e.extname
                 """
             )
             objects = (
-                [{"name": row.cells["extname"], "version": row.cells["extversion"], "relocatable": row.cells["extrelocatable"]} for row in rows]
+                [{"name": row.cells["name"],
+                    "version": row.cells["version"],
+                    "relocatable": row.cells["relocatable"],
+                    "comment": row.cells["comment"]} for row in rows]
                 if rows
                 else []
             )
-
+        elif object_type in ("function", "procedure"):
+            # prokind: 'f' = function, 'p' = procedure. Avoid obj_description(); use pg_description join.
+            prokind = "f" if object_type == "function" else "p"
+            rows = await SafeSqlDriver.execute_param_query(
+                sql_driver,
+                """
+                SELECT
+                  CASE p.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END AS object_type,
+                  n.nspname AS routine_schema,
+                  p.proname AS routine_name,        -- keep simple name to avoid catalog functions
+                  d.description AS comment
+                FROM pg_catalog.pg_proc p
+                JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.objsubid = 0
+                WHERE n.nspname = {} AND p.prokind = {}
+                ORDER BY routine_name
+                """,
+                [schema_name, prokind],
+            )
+            objects =(
+                [{
+                    "schema": row.cells["routine_schema"],
+                    "name": row.cells["routine_name"],
+                    "type": row.cells["object_type"],
+                    "comment": row.cells["comment"]} for row in rows]
+                if rows
+                else []
+            )
         else:
             return format_error_response(f"Unsupported object type: {object_type}")
 
@@ -178,7 +237,7 @@ async def list_objects(
         return format_error_response(str(e))
 
 
-@mcp.tool(description="Show detailed information about a database object")
+@mcp.tool(description="Show detailed information about a database object with comments")
 async def get_object_details(
     schema_name: str = Field(description="Schema name"),
     object_name: str = Field(description="Object name"),
@@ -189,6 +248,19 @@ async def get_object_details(
         sql_driver = await get_sql_driver()
 
         if object_type in ("table", "view"):
+            obj_comment_rows = await SafeSqlDriver.execute_param_query(
+                sql_driver,
+                """
+                SELECT d.description AS comment
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                WHERE n.nspname = {} AND c.relname = {}
+                """,
+                [schema_name, object_name],
+            )
+            object_comment = obj_comment_rows[0].cells["comment"] if obj_comment_rows else None
+
             # Get columns
             col_rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
@@ -207,12 +279,32 @@ async def get_object_details(
                         "data_type": r.cells["data_type"],
                         "is_nullable": r.cells["is_nullable"],
                         "default": r.cells["column_default"],
+                        "comment": None,
                     }
                     for r in col_rows
                 ]
                 if col_rows
                 else []
             )
+            col_cmt_rows = await SafeSqlDriver.execute_param_query(
+                sql_driver,
+                """
+                SELECT a.attname AS column_name, d.description AS comment
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_catalog.pg_attribute a
+                  ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                LEFT JOIN pg_catalog.pg_description d
+                  ON d.objoid = c.oid AND d.objsubid = a.attnum
+                WHERE n.nspname = {} AND c.relname = {}
+                ORDER BY a.attnum
+                """,
+                [schema_name, object_name],
+            )
+            # Map comments by column name and merge
+            col_comments = {r.cells["column_name"]: r.cells["comment"] for r in (col_cmt_rows or [])}
+            for col in columns:
+                col["comment"] = col_comments.get(col["column"])
 
             # Get constraints
             con_rows = await SafeSqlDriver.execute_param_query(
@@ -275,12 +367,26 @@ async def get_object_details(
 
             if rows and rows[0]:
                 row = rows[0]
+                cmt_rows = await SafeSqlDriver.execute_param_query(
+                    sql_driver,
+                    """
+                    SELECT d.description AS comment
+                    FROM pg_catalog.pg_class c
+                    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                    LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                    WHERE n.nspname = {} AND c.relname = {}
+                      AND c.relkind = 'S'
+                    """,
+                    [schema_name, object_name],
+                )
+                seq_comment = cmt_rows[0].cells["comment"] if cmt_rows else None
                 result = {
                     "schema": row.cells["sequence_schema"],
                     "name": row.cells["sequence_name"],
                     "data_type": row.cells["data_type"],
                     "start_value": row.cells["start_value"],
                     "increment": row.cells["increment"],
+                    "comment": seq_comment,
                 }
             else:
                 result = {}
@@ -289,19 +395,45 @@ async def get_object_details(
             rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
                 """
-                SELECT extname, extversion, extrelocatable
-                FROM pg_extension
-                WHERE extname = {}
+                SELECT e.extname AS name, e.extversion AS version, e.extrelocatable AS relocatable, d.description AS comment
+                FROM pg_catalog.pg_extension e
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = e.oid AND d.objsubid = 0
+                WHERE e.extname = {}
                 """,
                 [object_name],
             )
 
             if rows and rows[0]:
                 row = rows[0]
-                result = {"name": row.cells["extname"], "version": row.cells["extversion"], "relocatable": row.cells["extrelocatable"]}
+                result = {
+                    "name": row.cells["name"], 
+                    "version": row.cells["version"], 
+                    "relocatable": row.cells["relocatable"],
+                    "comment": row.cells["comment"]
+                }
             else:
                 result = {}
-
+        elif object_type in ("function", "procedure"):
+            # Routine comment via pg_description; avoid catalog functions to keep validator happy
+            prokind = "p" if object_type == "procedure" else "f"
+            rows = await SafeSqlDriver.execute_param_query(
+                sql_driver,
+                """
+                SELECT
+                  n.nspname AS routine_schema,
+                  p.proname AS routine_name,
+                  p.prokind AS kind,
+                  d.description AS comment
+                FROM pg_catalog.pg_proc p
+                JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.objsubid = 0
+                WHERE n.nspname = {} AND p.proname = {} AND p.prokind = {}
+                ORDER BY routine_name
+                """,
+                [schema_name, object_name, prokind],
+            )
+            result = [{"schema": r.cells["routine_schema"], "name": r.cells["routine_name"], "kind": r.cells["kind"],
+                       "comment": r.cells["comment"]} for r in (rows or [])]
         else:
             return format_error_response(f"Unsupported object type: {object_type}")
 
