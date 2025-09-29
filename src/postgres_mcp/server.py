@@ -5,10 +5,12 @@ import logging
 import os
 import signal
 import sys
+import threading
 from enum import Enum
 from typing import Any
 from typing import List
 from typing import Literal
+from typing import Optional
 from typing import Union
 
 import mcp.types as types
@@ -56,6 +58,8 @@ class AccessMode(str, Enum):
 db_connection = DbConnPool()
 current_access_mode = AccessMode.UNRESTRICTED
 shutdown_in_progress = False
+is_stdio_transport = False
+shutdown_event = threading.Event()
 
 
 async def get_sql_driver() -> Union[SqlDriver, SafeSqlDriver]:
@@ -509,6 +513,24 @@ async def get_top_queries(
         return format_error_response(str(e))
 
 
+def signal_handler(signal, _) -> None:
+    """
+    Method for handling incoming OS signals for graceful shutdown
+    or immediate exit.
+
+    - Logs the received signal.
+    - If running with stdio transport, exits the process immediately.
+    - Otherwise, triggers a graceful shutdown by setting the shutdown event.
+    """
+    logger.info(f"Received signal {signal}")
+    if is_stdio_transport:
+        logger.info("Stdio transport detected - using sys.exit()")
+        sys.exit(0)
+    else:
+        logger.info("Non-stdio transport - using graceful shutdown")
+        shutdown_event.set()
+
+
 async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="PostgreSQL MCP Server")
@@ -523,9 +545,9 @@ async def main():
     parser.add_argument(
         "--transport",
         type=str,
-        choices=["stdio", "sse"],
+        choices=["stdio", "sse", "streamable-http"],
         default="stdio",
-        help="Select MCP transport: stdio (default) or sse",
+        help="Select MCP transport: stdio (default), sse or streamable-http",
     )
     parser.add_argument(
         "--sse-host",
@@ -538,6 +560,18 @@ async def main():
         type=int,
         default=8000,
         help="Port for SSE server (default: 8000)",
+    )
+    parser.add_argument(
+        "--streamable-http-host",
+        type=str,
+        default="localhost",
+        help="Host to bind streamable http server to (default: localhost)",
+    )
+    parser.add_argument(
+        "--streamable-http-port",
+        type=int,
+        default=8001,
+        help="Port for streamable http server (default: 8001)",
     )
 
     args = parser.parse_args()
@@ -575,46 +609,68 @@ async def main():
         )
 
     # Set up proper shutdown handling
-    try:
-        loop = asyncio.get_running_loop()
-        signals = (signal.SIGTERM, signal.SIGINT)
-        for s in signals:
-            loop.add_signal_handler(s, lambda s=s: asyncio.create_task(shutdown(s)))
-    except NotImplementedError:
-        # Windows doesn't support signals properly
-        logger.warning("Signal handling not supported on Windows")
-        pass
-
-    # Run the server with the selected transport (always async)
-    if args.transport == "stdio":
-        await mcp.run_stdio_async()
+    if sys.platform != "win32":
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
     else:
-        # Update FastMCP settings based on command line arguments
-        mcp.settings.host = args.sse_host
-        mcp.settings.port = args.sse_port
-        await mcp.run_sse_async()
+        # On Windows, only SIGINT can be handled; SIGTERM is not supported.
+        signal.signal(signal.SIGINT, signal_handler)
+        logger.warning("Limited signal handling on Windows: only SIGINT is handled, SIGTERM is not supported.")
+    global shutdown_in_progress, is_stdio_transport
+    is_stdio_transport = args.transport == "stdio"
+    try:
+        logger.info("Server starting...")
+        while not shutdown_event.is_set():
+            # Run the server with the selected transport (always async)
+            if args.transport == "stdio":
+                await mcp.run_stdio_async()
+            elif args.transport == "sse":
+                mcp.settings.host = args.sse_host
+                mcp.settings.port = args.sse_port
+                await mcp.run_sse_async()
+            elif args.transport == "streamable-http":
+                mcp.settings.host = args.streamable_http_host
+                mcp.settings.port = args.streamable_http_port
+                await mcp.run_streamable_http_async()
+            await asyncio.sleep(0.1)
+        logger.info("Shutdown requested, cleaning up...")
+        await shutdown()
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+        if isinstance(e, asyncio.CancelledError):
+            logger.info("Server task cancelled")
+        else:
+            logger.info("Received keyboard interrupt")
+        await handle_transport_exit(0)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        await handle_transport_exit(1)
+    finally:
+        logger.info("Server stopped")
+        # Graceful exit for MCP servers
+        sys.exit(0)
+
+
+async def handle_transport_exit(exit_code: int = 0):
+    """Handle transport exit by triggering shutdown."""
+    if is_stdio_transport:
+        sys.exit(exit_code)
+    else:
+        await shutdown()
 
 
 async def shutdown(sig=None):
     """Clean shutdown of the server."""
-    global shutdown_in_progress
-
-    if shutdown_in_progress:
-        logger.warning("Forcing immediate exit")
-        # Use sys.exit instead of os._exit to allow for proper cleanup
-        sys.exit(1)
-
-    shutdown_in_progress = True
 
     if sig:
         logger.info(f"Received exit signal {sig.name}")
 
     # Close database connections
     try:
+        logger.info("Closing database connection...")
         await db_connection.close()
         logger.info("Closed database connections")
     except Exception as e:
         logger.error(f"Error closing database connections: {e}")
 
     # Exit with appropriate status code
-    sys.exit(128 + sig if sig is not None else 0)
+    logger.info("Shutdown complete")

@@ -1,8 +1,12 @@
 import asyncio
 import sys
 
+from dotenv import load_dotenv
+
 from . import server
 from . import top_queries
+
+load_dotenv()
 
 
 def main():
@@ -13,7 +17,14 @@ def main():
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-    asyncio.run(server.main())
+    try:
+        return asyncio.run(server.main())
+    except KeyboardInterrupt:
+        print("MCP server execution interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"Error running MCP server: {e}")
+        sys.exit(1)
 
 
 # Optionally expose other important items at package level
