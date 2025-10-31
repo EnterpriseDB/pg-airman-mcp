@@ -1,6 +1,4 @@
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,7 +20,9 @@ def mock_pg12_driver():
     driver = MagicMock(spec=SqlDriver)
 
     # Set up the version mock directly on the mock driver
-    with patch.object(top_queries_module, "get_postgres_version", autospec=True) as mock_version:
+    with patch.object(
+        top_queries_module, "get_postgres_version", autospec=True
+    ) as mock_version:
         mock_version.return_value = 12
 
         # Create async mock for execute_query
@@ -33,9 +33,33 @@ def mock_pg12_driver():
             if "pg_stat_statements" in query:
                 # Return data in PG 12 format with total_time and mean_time columns
                 return [
-                    MockSqlRowResult(cells={"query": "SELECT * FROM users", "calls": 100, "total_time": 1000.0, "mean_time": 10.0, "rows": 1000}),
-                    MockSqlRowResult(cells={"query": "SELECT * FROM orders", "calls": 50, "total_time": 750.0, "mean_time": 15.0, "rows": 500}),
-                    MockSqlRowResult(cells={"query": "SELECT * FROM products", "calls": 200, "total_time": 500.0, "mean_time": 2.5, "rows": 2000}),
+                    MockSqlRowResult(
+                        cells={
+                            "query": "SELECT * FROM users",
+                            "calls": 100,
+                            "total_time": 1000.0,
+                            "mean_time": 10.0,
+                            "rows": 1000,
+                        }
+                    ),
+                    MockSqlRowResult(
+                        cells={
+                            "query": "SELECT * FROM orders",
+                            "calls": 50,
+                            "total_time": 750.0,
+                            "mean_time": 15.0,
+                            "rows": 500,
+                        }
+                    ),
+                    MockSqlRowResult(
+                        cells={
+                            "query": "SELECT * FROM products",
+                            "calls": 200,
+                            "total_time": 500.0,
+                            "mean_time": 2.5,
+                            "rows": 2000,
+                        }
+                    ),
                 ]
             return None
 
@@ -51,7 +75,9 @@ def mock_pg13_driver():
     driver = MagicMock(spec=SqlDriver)
 
     # Set up the version mock directly on the mock driver
-    with patch.object(top_queries_module, "get_postgres_version", autospec=True) as mock_version:
+    with patch.object(
+        top_queries_module, "get_postgres_version", autospec=True
+    ) as mock_version:
         mock_version.return_value = 13
 
         # Create async mock for execute_query
@@ -60,16 +86,35 @@ def mock_pg13_driver():
         # Configure the mock to return different results based on the query
         async def side_effect(query, *args, **kwargs):
             if "pg_stat_statements" in query:
-                # Return data in PG 13+ format with total_exec_time and mean_exec_time columns
+                # Return data in PG 13+ format with total_exec_time and
+                # mean_exec_time columns
                 return [
                     MockSqlRowResult(
-                        cells={"query": "SELECT * FROM users", "calls": 100, "total_exec_time": 1000.0, "mean_exec_time": 10.0, "rows": 1000}
+                        cells={
+                            "query": "SELECT * FROM users",
+                            "calls": 100,
+                            "total_exec_time": 1000.0,
+                            "mean_exec_time": 10.0,
+                            "rows": 1000,
+                        }
                     ),
                     MockSqlRowResult(
-                        cells={"query": "SELECT * FROM orders", "calls": 50, "total_exec_time": 750.0, "mean_exec_time": 15.0, "rows": 500}
+                        cells={
+                            "query": "SELECT * FROM orders",
+                            "calls": 50,
+                            "total_exec_time": 750.0,
+                            "mean_exec_time": 15.0,
+                            "rows": 500,
+                        }
                     ),
                     MockSqlRowResult(
-                        cells={"query": "SELECT * FROM products", "calls": 200, "total_exec_time": 500.0, "mean_exec_time": 2.5, "rows": 2000}
+                        cells={
+                            "query": "SELECT * FROM products",
+                            "calls": 200,
+                            "total_exec_time": 500.0,
+                            "mean_exec_time": 2.5,
+                            "rows": 2000,
+                        }
                     ),
                 ]
             return None
@@ -84,7 +129,9 @@ def mock_pg13_driver():
 @pytest.fixture
 def mock_extension_installed():
     """Mock check_extension to report extension is installed."""
-    with patch.object(top_queries_module, "check_extension", autospec=True) as mock_check:
+    with patch.object(
+        top_queries_module, "check_extension", autospec=True
+    ) as mock_check:
         mock_check.return_value = ExtensionStatus(
             is_installed=True,
             is_available=True,
@@ -98,7 +145,9 @@ def mock_extension_installed():
 @pytest.fixture
 def mock_extension_not_installed():
     """Mock check_extension to report extension is not installed."""
-    with patch.object(top_queries_module, "check_extension", autospec=True) as mock_check:
+    with patch.object(
+        top_queries_module, "check_extension", autospec=True
+    ) as mock_check:
         mock_check.return_value = ExtensionStatus(
             is_installed=False,
             is_available=True,
@@ -160,7 +209,9 @@ async def test_top_queries_pg13_total_sort(mock_pg13_driver, mock_extension_inst
     assert "SELECT * FROM users" in result
     # Verify the query used the correct column name for PG 13+
     assert "total_exec_time" in str(mock_pg13_driver.execute_query.call_args)
-    assert "ORDER BY total_exec_time DESC" in str(mock_pg13_driver.execute_query.call_args)
+    assert "ORDER BY total_exec_time DESC" in str(
+        mock_pg13_driver.execute_query.call_args
+    )
 
 
 @pytest.mark.asyncio
@@ -178,7 +229,9 @@ async def test_top_queries_pg13_mean_sort(mock_pg13_driver, mock_extension_insta
     assert "SELECT * FROM orders" in result
     # Verify the query used the correct column name for PG 13+
     assert "mean_exec_time" in str(mock_pg13_driver.execute_query.call_args)
-    assert "ORDER BY mean_exec_time DESC" in str(mock_pg13_driver.execute_query.call_args)
+    assert "ORDER BY mean_exec_time DESC" in str(
+        mock_pg13_driver.execute_query.call_args
+    )
 
 
 @pytest.mark.asyncio

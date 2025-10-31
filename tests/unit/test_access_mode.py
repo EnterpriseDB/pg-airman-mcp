@@ -1,15 +1,11 @@
 import asyncio
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from postgres_mcp.server import AccessMode
-from postgres_mcp.server import get_sql_driver
+from postgres_mcp.server import AccessMode, get_sql_driver
 from postgres_mcp.sql.safe_sql import SafeSqlDriver
-from postgres_mcp.sql.sql_driver import DbConnPool
-from postgres_mcp.sql.sql_driver import SqlDriver
+from postgres_mcp.sql.sql_driver import DbConnPool, SqlDriver
 
 
 @pytest.fixture
@@ -28,7 +24,9 @@ def mock_db_connection():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_sql_driver_returns_correct_driver(access_mode, expected_driver_type, mock_db_connection):
+async def test_get_sql_driver_returns_correct_driver(
+    access_mode, expected_driver_type, mock_db_connection
+):
     """Test that get_sql_driver returns the correct driver type based on access mode."""
     with (
         patch("postgres_mcp.server.current_access_mode", access_mode),
@@ -101,7 +99,9 @@ async def test_command_line_parsing():
 
             # Run main (partially mocked to avoid actual connection,
             # and to control shutdown behavior)
-            with patch("postgres_mcp.server.shutdown_event.is_set", MagicMock()) as mock_shutdown:
+            with patch(
+                "postgres_mcp.server.shutdown_event.is_set", MagicMock()
+            ) as mock_shutdown:
                 mock_shutdown.side_effect = [False, True]
                 try:
                     await main()

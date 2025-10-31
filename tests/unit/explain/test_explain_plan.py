@@ -1,12 +1,10 @@
 import json
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
-from postgres_mcp.artifacts import ErrorResult
-from postgres_mcp.artifacts import ExplainPlanArtifact
+from postgres_mcp.artifacts import ErrorResult, ExplainPlanArtifact
 from postgres_mcp.explain import ExplainPlanTool
 
 
@@ -36,12 +34,24 @@ async def test_has_bind_variables():
     tool = ExplainPlanTool(sql_driver=MagicMock())
 
     # Test with bind variables
-    assert tool._has_bind_variables("SELECT * FROM users WHERE id = $1") is True  # type: ignore
-    assert tool._has_bind_variables("INSERT INTO users VALUES ($1, $2)") is True  # type: ignore
+    assert (
+        tool._has_bind_variables("SELECT * FROM users WHERE id = $1")  # type: ignore
+        is True
+    )
+    assert (
+        tool._has_bind_variables("INSERT INTO users VALUES ($1, $2)")  # type: ignore
+        is True
+    )
 
     # Test without bind variables
-    assert tool._has_bind_variables("SELECT * FROM users WHERE id = 1") is False  # type: ignore
-    assert tool._has_bind_variables("INSERT INTO users VALUES (1, 'test')") is False  # type: ignore
+    assert (
+        tool._has_bind_variables("SELECT * FROM users WHERE id = 1")  # type: ignore
+        is False
+    )
+    assert (
+        tool._has_bind_variables("INSERT INTO users VALUES (1, 'test')")  # type: ignore
+        is False
+    )
 
 
 @pytest.mark.asyncio
@@ -50,13 +60,36 @@ async def test_has_like_expressions():
     tool = ExplainPlanTool(sql_driver=MagicMock())
 
     # Test with LIKE expressions
-    assert tool._has_like_expressions("SELECT * FROM users WHERE name LIKE '%John%'") is True  # type: ignore
-    assert tool._has_like_expressions("SELECT * FROM users WHERE name like 'John%'") is True  # type: ignore
-    assert tool._has_like_expressions("SELECT * FROM users WHERE UPPER(name) LIKE 'JOHN%'") is True  # type: ignore
+    assert (
+        tool._has_like_expressions(  # type: ignore
+            "SELECT * FROM users WHERE name LIKE '%John%'"
+        )
+        is True
+    )  # type: ignore
+    assert (
+        tool._has_like_expressions(  # type: ignore
+            "SELECT * FROM users WHERE name like 'John%'"
+        )
+        is True
+    )  # type: ignore
+    assert (
+        tool._has_like_expressions(  # type: ignore
+            "SELECT * FROM users WHERE UPPER(name) LIKE 'JOHN%'"
+        )
+        is True
+    )  # type: ignore
 
     # Test without LIKE expressions
-    assert tool._has_like_expressions("SELECT * FROM users WHERE name = 'John'") is False  # type: ignore
-    assert tool._has_like_expressions("SELECT * FROM users WHERE id > 100") is False  # type: ignore
+    assert (
+        tool._has_like_expressions(  # type: ignore
+            "SELECT * FROM users WHERE name = 'John'"
+        )
+        is False
+    )  # type: ignore
+    assert (
+        tool._has_like_expressions("SELECT * FROM users WHERE id > 100")  # type: ignore
+        is False
+    )
 
 
 @pytest.mark.asyncio
@@ -129,7 +162,10 @@ async def test_explain_with_bind_variables(mock_sql_driver):
             break
 
     assert explain_call is not None
-    assert "EXPLAIN (FORMAT JSON, GENERIC_PLAN) SELECT * FROM users WHERE id = $1" in explain_call
+    assert (
+        "EXPLAIN (FORMAT JSON, GENERIC_PLAN) SELECT * FROM users WHERE id = $1"
+        in explain_call
+    )
 
 
 @pytest.mark.asyncio
@@ -159,7 +195,9 @@ async def test_explain_with_bind_variables_pg15(mock_sql_driver, monkeypatch):
             return "SELECT * FROM users WHERE id = 42"  # Replaced query
 
     # The correct import path for monkeypatching
-    monkeypatch.setattr("postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams)
+    monkeypatch.setattr(
+        "postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
+    )
 
     # Set up the mock to return different responses for different queries
     def side_effect(query):
@@ -229,7 +267,9 @@ async def test_explain_analyze_with_bind_variables(mock_sql_driver, monkeypatch)
             return "SELECT * FROM users WHERE id = 42"  # Replaced query
 
     # The correct import path for monkeypatching
-    monkeypatch.setattr("postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams)
+    monkeypatch.setattr(
+        "postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
+    )
 
     # Set up the mock to return mock plan for the modified query
     def side_effect(query):
@@ -374,7 +414,9 @@ async def test_explain_with_like_and_bind_variables_pg16(mock_sql_driver, monkey
             return "SELECT * FROM users WHERE name LIKE '%John%'"  # Replaced query
 
     # The correct import path for monkeypatching
-    monkeypatch.setattr("postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams)
+    monkeypatch.setattr(
+        "postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
+    )
 
     # Set up the mock to return different responses for different queries
     def side_effect(query):
@@ -454,14 +496,19 @@ async def test_explain_with_functional_hypothetical_indexes(mock_sql_driver):
     ]
 
     tool = ExplainPlanTool(sql_driver=mock_sql_driver)
-    result = await tool.explain_with_hypothetical_indexes(sql_query, hypothetical_indexes)
+    result = await tool.explain_with_hypothetical_indexes(
+        sql_query, hypothetical_indexes
+    )
 
     # Verify the result is successful
-    assert not isinstance(result, ErrorResult), f"Got error: {result.value if isinstance(result, ErrorResult) else ''}"
+    assert not isinstance(result, ErrorResult), (
+        f"Got error: {result.value if isinstance(result, ErrorResult) else ''}"
+    )
     assert isinstance(result, ExplainPlanArtifact)
 
     # Check that explain query was called correctly
-    # The important part is that the expression is properly included in the CREATE INDEX statement
+    # The important part is that the expression is properly included
+    # in the CREATE INDEX statement.
     # We need to ensure "LOWER(primary_title)" isn't broken up or mishandled
     calls = [call[0][0] for call in mock_sql_driver.execute_query.call_args_list]
     explain_calls = [call for call in calls if "EXPLAIN" in call]

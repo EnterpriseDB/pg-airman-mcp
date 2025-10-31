@@ -1,13 +1,9 @@
 # ruff: noqa: B017
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import call
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
-from postgres_mcp.sql import DbConnPool
-from postgres_mcp.sql import SqlDriver
+from postgres_mcp.sql import DbConnPool, SqlDriver
 
 
 class AsyncContextManagerMock(AsyncMock):
@@ -100,7 +96,9 @@ async def test_execute_query_readonly_transaction(mock_connection):
     # Create a mock implementation of _execute_with_connection
     async def mock_impl(connection, query, params, force_readonly):
         # Simulate transaction
-        await cursor.execute("BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION")
+        await cursor.execute(
+            "BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION"
+        )
 
         # Execute the query
         if params:
@@ -151,7 +149,9 @@ async def test_execute_query_writeable_transaction(mock_connection):
     # Create a mock implementation of _execute_with_connection
     async def mock_impl(connection, query, params, force_readonly):
         # Simulate transaction
-        await cursor.execute("BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION")
+        await cursor.execute(
+            "BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION"
+        )
 
         # Execute the query
         if params:
@@ -227,7 +227,9 @@ async def test_execute_query_no_results(mock_connection):
     # Create a mock implementation of _execute_with_connection
     async def mock_impl(connection, query, params, force_readonly):
         # Simulate transaction
-        await cursor.execute("BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION")
+        await cursor.execute(
+            "BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION"
+        )
 
         # Execute the query
         if params:
@@ -268,7 +270,9 @@ async def test_execute_query_with_params(mock_connection):
     # Create a mock implementation of _execute_with_connection
     async def mock_impl(connection, query, params, force_readonly):
         # Simulate transaction
-        await cursor.execute("BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION")
+        await cursor.execute(
+            "BEGIN TRANSACTION READ ONLY" if force_readonly else "BEGIN TRANSACTION"
+        )
 
         # Execute the query with parameters
         if params:
@@ -297,7 +301,9 @@ async def test_execute_query_with_params(mock_connection):
     )
 
     # Verify parameters were passed correctly
-    assert call("SELECT * FROM test WHERE id = %s", [1]) in cursor.execute.call_args_list
+    assert (
+        call("SELECT * FROM test WHERE id = %s", [1]) in cursor.execute.call_args_list
+    )
 
 
 @pytest.mark.asyncio

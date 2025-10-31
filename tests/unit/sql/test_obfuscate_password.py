@@ -35,8 +35,10 @@ def test_obfuscate_postgresql_url():
 def test_obfuscate_in_error_message():
     """Test obfuscation of URLs within error messages."""
     error_msg = (
-        "Failed to connect: could not connect to server: Connection refused. Is the server "
-        "running on host 'localhost' (127.0.0.1) and accepting TCP/IP connections on port 5432? "
+        "Failed to connect: could not connect to server: Connection refused. "
+        "Is the server "
+        "running on host 'localhost' (127.0.0.1) and accepting TCP/IP connections on "
+        "port 5432? "
         "connection string: postgresql://admin:topsecret@localhost:5432/mydb"
     )
     obfuscated = obfuscate_password(error_msg)
@@ -56,7 +58,7 @@ def test_obfuscate_connection_params():
     assert "password=****" in obfuscated
 
     # Connection in Python code with single quotes
-    code_snippet = """conn = psycopg.connect("host=localhost dbname=mydb user=postgres password='my$3cret!'")"""
+    code_snippet = """conn = psycopg.connect("host=localhost dbname=mydb user=postgres password='my$3cret!'")"""  # noqa: E501
     obfuscated = obfuscate_password(code_snippet)
     assert obfuscated is not None
     assert "my$3cret!" not in obfuscated

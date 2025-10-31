@@ -98,7 +98,7 @@ async def setup_test_tables(sql_driver):
                     ELSE 'cancelled'
                 END
             FROM generate_series(1, 1000) i
-        """
+        """  # noqa: E501
         )
 
         # Run ANALYZE to update statistics
@@ -120,9 +120,13 @@ async def cleanup_test_tables(sql_driver):
 
 @pytest.mark.asyncio
 async def test_database_health_all(local_sql_driver):
-    """Test that the database health tool runs without errors when performing all health checks.
-    This test only verifies that the tool executes successfully and returns results in the expected format.
-    It does not validate whether the health check results are correct."""
+    """
+    Test that the database health tool runs without errors when performing
+    all health checks.
+    This test only verifies that the tool executes successfully and returns results
+    in the expected format.
+    It does not validate whether the health check results are correct.
+    """
     await setup_test_tables(local_sql_driver)
     try:
         local_sql_driver.connect()
@@ -149,7 +153,8 @@ async def test_database_health_all(local_sql_driver):
         assert "Constraint health:" in health_report
 
         # Verify specific health issues we know should be detected
-        assert "idx_orders_customer_dup" in health_report  # Should detect duplicate index
+        # Should detect duplicate index
+        assert "idx_orders_customer_dup" in health_report
 
     finally:
         await cleanup_test_tables(local_sql_driver)
