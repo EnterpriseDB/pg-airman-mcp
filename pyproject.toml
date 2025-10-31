@@ -45,11 +45,11 @@ dev = [
 ]
 
 [tool.black]
-line-length = 150
+line-length = 88
 
 [tool.ruff]
-line-length = 150
-target-version = "py38"
+line-length = 88
+target-version = "py312"
 exclude = [".venv*"]
 
 lint.select = [
@@ -69,12 +69,13 @@ lint.select = [
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = 88
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.isort]
-force-single-line = true
 known-first-party = ["postgres-mcp"]
 
 [tool.pyright]
