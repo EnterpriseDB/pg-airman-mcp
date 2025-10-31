@@ -99,11 +99,14 @@ async def test_command_line_parsing():
 
             postgres_mcp.server.current_access_mode = AccessMode.UNRESTRICTED
 
-            # Run main (partially mocked to avoid actual connection)
-            try:
-                await main()
-            except Exception:
-                pass
+            # Run main (partially mocked to avoid actual connection,
+            # and to control shutdown behavior)
+            with patch("postgres_mcp.server.shutdown_event.is_set", MagicMock()) as mock_shutdown:
+                mock_shutdown.side_effect = [False, True]
+                try:
+                    await main()
+                except SystemExit:
+                    pass
 
             # Verify the mode was changed to RESTRICTED
             assert postgres_mcp.server.current_access_mode == AccessMode.RESTRICTED
