@@ -1,8 +1,7 @@
 import logging
 import math
 from dataclasses import dataclass
-from typing import Any
-from typing import override
+from typing import Any, override
 
 import instructor
 from openai import OpenAI
@@ -13,10 +12,8 @@ from postgres_mcp.artifacts import ErrorResult
 from postgres_mcp.explain.explain_plan import ExplainPlanTool
 from postgres_mcp.sql import TableAliasVisitor
 
-from ..sql import IndexDefinition
-from ..sql import SqlDriver
-from .index_opt_base import IndexRecommendation
-from .index_opt_base import IndexTuningBase
+from ..sql import IndexDefinition, SqlDriver
+from .index_opt_base import IndexRecommendation, IndexTuningBase
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +62,18 @@ class LLMOptimizerTool(IndexTuningBase):
         self.sql_driver = sql_driver
         self.max_no_progress_attempts = max_no_progress_attempts
         self.pareto_alpha = pareto_alpha
-        logger.info("Initialized LLMOptimizerTool with max_no_progress_attempts=%d", max_no_progress_attempts)
+        logger.info(
+            "Initialized LLMOptimizerTool with max_no_progress_attempts=%d",
+            max_no_progress_attempts,
+        )
 
     def score(self, execution_cost: float, index_size: float) -> float:
         return math.log(execution_cost) + self.pareto_alpha * math.log(index_size)
 
     @override
-    async def _generate_recommendations(self, query_weights: list[tuple[str, SelectStmt, float]]) -> tuple[set[IndexRecommendation], float]:
+    async def _generate_recommendations(
+        self, query_weights: list[tuple[str, SelectStmt, float]]
+    ) -> tuple[set[IndexRecommendation], float]:
         """Generate index tuning queries using optimization by LLM."""
         # For now we support only one table at a time
         if len(query_weights) > 1:
@@ -99,18 +101,28 @@ class LLMOptimizerTool(IndexTuningBase):
         explain_tool = ExplainPlanTool(self.sql_driver)
         explain_result = await explain_tool.explain(query)
         if isinstance(explain_result, ErrorResult):
-            logger.error("Failed to generate explain plan: %s", explain_result.to_text())
-            raise ValueError(f"Failed to generate explain plan: {explain_result.to_text()}")
+            logger.error(
+                "Failed to generate explain plan: %s", explain_result.to_text()
+            )
+            raise ValueError(
+                f"Failed to generate explain plan: {explain_result.to_text()}"
+            )
 
         # Get the explain plan JSON
         explain_plan_json = explain_result.value
         logger.debug("Generated explain plan: %s", explain_plan_json)
 
         # Extract indexes used in the explain plan
-        indexes_used: set[Index] = await self._extract_indexes_from_explain_plan_with_columns(explain_plan_json)
+        indexes_used: set[
+            Index
+        ] = await self._extract_indexes_from_explain_plan_with_columns(
+            explain_plan_json
+        )
 
         # Get the current cost
-        original_cost = await self._evaluate_configuration_cost(query_weights, frozenset())
+        original_cost = await self._evaluate_configuration_cost(
+            query_weights, frozenset()
+        )
         logger.info("Original query cost: %f", original_cost)
 
         original_config = ScoredIndexes(
@@ -141,14 +153,27 @@ class LLMOptimizerTool(IndexTuningBase):
             if attempt_history:
                 history_prompt = "\nPrevious attempts and their costs:\n"
                 for attempt in attempt_history:
-                    indexes_str = ";".join(idx.to_index_definition().definition for idx in attempt.indexes)
-                    history_prompt += f"- Indexes: {indexes_str}, Cost: {attempt.execution_cost}, Index Size: {attempt.index_size}, "
+                    indexes_str = ";".join(
+                        idx.to_index_definition().definition for idx in attempt.indexes
+                    )
+                    history_prompt += (
+                        f"- Indexes: {indexes_str}, "
+                        f"Cost: {attempt.execution_cost}, "
+                        f"Index Size: {attempt.index_size}, "
+                    )
                     history_prompt += f"Objective Score: {attempt.objective_score}\n"
 
             if no_progress_count > 0:
-                remaining_attempts_prompt = f"You have made {no_progress_count} attempts without progress. "
-                if self.max_no_progress_attempts - no_progress_count < self.max_no_progress_attempts / 2:
-                    remaining_attempts_prompt += "Get creative and suggest indexes that are not obvious."
+                remaining_attempts_prompt = (
+                    f"You have made {no_progress_count} attempts without progress. "
+                )
+                if (
+                    self.max_no_progress_attempts - no_progress_count
+                    < self.max_no_progress_attempts / 2
+                ):
+                    remaining_attempts_prompt += (
+                        "Get creative and suggest indexes that are not obvious."
+                    )
             else:
                 remaining_attempts_prompt = ""
 
@@ -157,25 +182,43 @@ class LLMOptimizerTool(IndexTuningBase):
                 response_model=IndexingAlternative,
                 temperature=1.2,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that generates index recommendations for a given workload."},
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant that generates index "
+                            "recommendations for a given workload."
+                        ),
+                    },
                     {
                         "role": "user",
-                        "content": f"Here is the query we are optimizing: {query}\n"
-                        f"Here is the explain plan: {explain_plan_json}\n"
-                        f"Here are the existing indexes: {';'.join(idx.to_index_definition().definition for idx in indexes_used)}\n"
-                        f"{history_prompt}\n"
-                        "Each indexing suggestion that you provide is a combination of indexes. You can provide multiple alternative suggestions. "
-                        "We will evaluate each alternative using hypopg to see how the optimizer will be behave with those indexes in place. "
-                        "The overall score is based on a combination of execution cost and index size. In all cases, lower is better. "
-                        "Prefer fewer indexes to more indexes. Prefer indexes with fewer columns to indexes with more columns. "
-                        f"{remaining_attempts_prompt}",
+                        "content": (
+                            f"Here is the query we are optimizing: {query}\n"
+                            f"Here is the explain plan: {explain_plan_json}\n"
+                            f"Here are the existing indexes: "
+                            f"{';'.join(idx.to_index_definition().definition for idx in indexes_used)}\n"  # noqa: E501
+                            f"{history_prompt}\n"
+                            "Each indexing suggestion that you provide "
+                            "is a combination of indexes. You can provide multiple "
+                            "alternative suggestions. We will evaluate each "
+                            "alternative using hypopg to see how the "
+                            "optimizer will be behave with those indexes in place. "
+                            "The overall score is based on a combination of "
+                            "execution cost and index size. In all cases, "
+                            "lower is better. Prefer fewer indexes to more indexes. "
+                            "Prefer indexes with fewer columns to indexes "
+                            "with more columns. "
+                            f"{remaining_attempts_prompt}"
+                        ),
                     },
                 ],
             )
 
             # Convert the response to IndexConfig objects
             index_alternatives: list[set[Index]] = response.alternatives
-            logger.info("Received %d alternative index configurations from LLM", len(index_alternatives))
+            logger.info(
+                "Received %d alternative index configurations from LLM",
+                len(index_alternatives),
+            )
 
             # If no alternatives were generated, break the loop
             if not index_alternatives:
@@ -186,28 +229,48 @@ class LLMOptimizerTool(IndexTuningBase):
             found_improvement = False
             for i, index_set in enumerate(index_alternatives):
                 try:
-                    logger.info("Evaluating alternative %d/%d with %d indexes", i + 1, len(index_alternatives), len(index_set))
+                    logger.info(
+                        "Evaluating alternative %d/%d with %d indexes",
+                        i + 1,
+                        len(index_alternatives),
+                        len(index_set),
+                    )
                     # Evaluate this index configuration
                     execution_cost_estimate = await self._evaluate_configuration_cost(
-                        query_weights, frozenset({index.to_index_definition() for index in index_set})
+                        query_weights,
+                        frozenset({index.to_index_definition() for index in index_set}),
                     )
                     logger.info(
                         "Alternative %d cost: %f (reduction: %.2f%%)",
                         i + 1,
                         execution_cost_estimate,
-                        ((best_config.execution_cost - execution_cost_estimate) / best_config.execution_cost) * 100,
+                        (
+                            (best_config.execution_cost - execution_cost_estimate)
+                            / best_config.execution_cost
+                        )
+                        * 100,
                     )
 
                     # Estimate the size of the indexes
-                    index_size_estimate = await self._estimate_index_size_2({index.to_index_definition() for index in index_set}, 1024 * 1024)
+                    index_size_estimate = await self._estimate_index_size_2(
+                        {index.to_index_definition() for index in index_set},
+                        1024 * 1024,
+                    )
                     logger.info("Estimated index size: %f", index_size_estimate)
 
                     # Score based on a balance of size and performance
-                    score = math.log(execution_cost_estimate) + self.pareto_alpha * math.log(total_table_size + index_size_estimate)
+                    score = math.log(
+                        execution_cost_estimate
+                    ) + self.pareto_alpha * math.log(
+                        total_table_size + index_size_estimate
+                    )
 
                     # Record this attempt in history
                     latest_config = ScoredIndexes(
-                        indexes={Index(table_name=index.table_name, columns=index.columns) for index in index_set},
+                        indexes={
+                            Index(table_name=index.table_name, columns=index.columns)
+                            for index in index_set
+                        },
                         execution_cost=execution_cost_estimate,
                         index_size=index_size_estimate,
                         objective_score=score,
@@ -221,8 +284,14 @@ class LLMOptimizerTool(IndexTuningBase):
                         best_config = latest_config
                         found_improvement = True
                 except Exception as e:
-                    # We discard the alternative. We are seeing this happen due to invalid index definitions.
-                    logger.error("Error evaluating alternative %d/%d: %s", i + 1, len(index_alternatives), str(e))
+                    # We discard the alternative. We are seeing this
+                    # happen due to invalid index definitions.
+                    logger.error(
+                        "Error evaluating alternative %d/%d: %s",
+                        i + 1,
+                        len(index_alternatives),
+                        str(e),
+                    )
 
             # Keep only the 5 best results in the attempt history
             attempt_history.sort(key=lambda x: x.objective_score)
@@ -233,24 +302,35 @@ class LLMOptimizerTool(IndexTuningBase):
             else:
                 no_progress_count += 1
                 logger.info(
-                    "No improvement found in this iteration. Attempts without progress: %d/%d", no_progress_count, self.max_no_progress_attempts
+                    "No improvement found in this iteration. "
+                    "Attempts without progress: %d/%d",
+                    no_progress_count,
+                    self.max_no_progress_attempts,
                 )
 
         if best_config != original_config:
             logger.info(
-                "Selected best index configuration with %d indexes, cost reduction: %.2f%%, indexes: %s",
+                "Selected best index configuration with %d indexes, "
+                "cost reduction: %.2f%%, indexes: %s",
                 len(best_config.indexes),
                 ((original_cost - best_config.execution_cost) / original_cost) * 100,
-                ", ".join(f"{idx.table_name}.({','.join(idx.columns)})" for idx in best_config.indexes),
+                ", ".join(
+                    f"{idx.table_name}.({','.join(idx.columns)})"
+                    for idx in best_config.indexes
+                ),
             )
         else:
             logger.info("No better index configuration found")
 
         # Convert Index objects to IndexConfig objects for return
-        best_index_config_set = {index.to_index_recommendation() for index in best_config.indexes}
+        best_index_config_set = {
+            index.to_index_recommendation() for index in best_config.indexes
+        }
         return (best_index_config_set, best_config.execution_cost)
 
-    async def _estimate_index_size_2(self, index_set: set[IndexDefinition], min_size_penalty: float = 1024 * 1024) -> float:
+    async def _estimate_index_size_2(
+        self, index_set: set[IndexDefinition], min_size_penalty: float = 1024 * 1024
+    ) -> float:
         """
         Estimate the size of a set of indexes using hypopg.
 
@@ -270,27 +350,39 @@ class LLMOptimizerTool(IndexTuningBase):
                 # Create a hypothetical index using hypopg
                 # Using a tuple to avoid LiteralString type error
                 create_index_query = (
-                    "WITH hypo_index AS (SELECT indexrelid FROM hypopg_create_index(%s)) "
-                    "SELECT hypopg_relation_size(indexrelid) as size, hypopg_drop_index(indexrelid) FROM hypo_index;"
+                    "WITH hypo_index AS (SELECT indexrelid FROM "
+                    "hypopg_create_index(%s)) "
+                    "SELECT hypopg_relation_size(indexrelid) as size, "
+                    "hypopg_drop_index(indexrelid) FROM hypo_index;"
                 )
 
                 # Execute the query to get the index size
-                result = await self.sql_driver.execute_query(create_index_query, params=[index_config.definition])
+                result = await self.sql_driver.execute_query(
+                    create_index_query, params=[index_config.definition]
+                )
 
                 if result and len(result) > 0:
                     # Extract the size from the result
                     size = result[0].cells.get("size", 0)
                     total_size += max(float(size), min_size_penalty)
-                    logger.debug(f"Estimated size for index {index_config.name}: {size} bytes")
+                    logger.debug(
+                        f"Estimated size for index {index_config.name}: {size} bytes"
+                    )
                 else:
-                    logger.warning(f"Failed to estimate size for index {index_config.name}")
+                    logger.warning(
+                        f"Failed to estimate size for index {index_config.name}"
+                    )
 
             except Exception as e:
-                logger.error(f"Error estimating size for index {index_config.name}: {e!s}")
+                logger.error(
+                    f"Error estimating size for index {index_config.name}: {e!s}"
+                )
 
         return total_size
 
-    def _extract_indexes_from_explain_plan(self, explain_plan_json: Any) -> set[tuple[str, str]]:
+    def _extract_indexes_from_explain_plan(
+        self, explain_plan_json: Any
+    ) -> set[tuple[str, str]]:
         """
         Extract indexes used in the explain plan JSON.
 
@@ -298,7 +390,8 @@ class LLMOptimizerTool(IndexTuningBase):
             explain_plan_json: The explain plan JSON from PostgreSQL
 
         Returns:
-            A set of tuples (table_name, index_name) representing the indexes used in the plan
+            A set of tuples (table_name, index_name) representing
+            the indexes used in the plan
         """
         indexes_used = set()
         if isinstance(explain_plan_json, dict):
@@ -307,10 +400,16 @@ class LLMOptimizerTool(IndexTuningBase):
 
                 def extract_indexes_from_node(node):
                     # Check if this is an index scan node
-                    if node.get("Node Type") in ["Index Scan", "Index Only Scan", "Bitmap Index Scan"]:
+                    if node.get("Node Type") in [
+                        "Index Scan",
+                        "Index Only Scan",
+                        "Bitmap Index Scan",
+                    ]:
                         if "Index Name" in node and "Relation Name" in node:
                             # Add the table name and index name
-                            indexes_used.add((node["Relation Name"], node["Index Name"]))
+                            indexes_used.add(
+                                (node["Relation Name"], node["Index Name"])
+                            )
 
                     # Recursively process child plans
                     if "Plans" in node:
@@ -323,7 +422,9 @@ class LLMOptimizerTool(IndexTuningBase):
 
         return indexes_used
 
-    async def _extract_indexes_from_explain_plan_with_columns(self, explain_plan_json: Any) -> set[Index]:
+    async def _extract_indexes_from_explain_plan_with_columns(
+        self, explain_plan_json: Any
+    ) -> set[Index]:
         """
         Extract indexes used in the explain plan JSON and populate their columns.
 
@@ -331,7 +432,8 @@ class LLMOptimizerTool(IndexTuningBase):
             explain_plan_json: The explain plan JSON from PostgreSQL
 
         Returns:
-            A set of Index objects representing the indexes used in the plan with their columns
+            A set of Index objects representing the indexes used
+            in the plan with their columns
         """
         # First extract the indexes without columns
         index_tuples = self._extract_indexes_from_explain_plan(explain_plan_json)
@@ -373,7 +475,11 @@ class LLMOptimizerTool(IndexTuningBase):
 
             if result and len(result) > 0:
                 # Extract column names from the result
-                columns = [row.cells.get("attname", "") for row in result if row.cells.get("attname")]
+                columns = [
+                    row.cells.get("attname", "")
+                    for row in result
+                    if row.cells.get("attname")
+                ]
                 return tuple(columns)
             else:
                 logger.warning(f"No columns found for index {index_name}")

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from ..sql import SafeSqlDriver
-from ..sql import SqlDriver
+from ..sql import SafeSqlDriver, SqlDriver
 
 
 @dataclass
@@ -40,7 +39,8 @@ class VacuumHealthCalc:
         result = ["Tables approaching transaction ID wraparound:"]
         for metric in unhealthy:
             result.append(
-                f"Table '{metric.schema}.{metric.table}' has {metric.transactions_left:,} transactions "
+                f"Table '{metric.schema}.{metric.table}' has "
+                f"{metric.transactions_left:,} transactions "
                 f"remaining before wraparound (threshold: {self.threshold:,})"
             )
         return "\n".join(result)
@@ -65,7 +65,7 @@ class VacuumHealthCalc:
                 AND ({} - GREATEST(AGE(c.relfrozenxid), AGE(t.relfrozenxid))) < {}
             ORDER BY
                 3, 1, 2
-        """,
+        """,  # noqa: E501
             [self.max_value, self.max_value, self.threshold],
         )
 
@@ -86,10 +86,12 @@ class VacuumHealthCalc:
 
     async def _get_vacuum_stats(self) -> dict[str, dict[str, str | None]]:
         """Get vacuum statistics for the database."""
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT relname, last_vacuum, last_autovacuum
             FROM pg_stat_user_tables
-        """)
+        """
+        )
         if not result:
             return {}
         result_list = [dict(x.cells) for x in result]

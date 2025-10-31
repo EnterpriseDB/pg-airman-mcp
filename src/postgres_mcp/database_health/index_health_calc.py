@@ -1,7 +1,6 @@
 from typing import Any
 
-from ..sql import SafeSqlDriver
-from ..sql import SqlDriver
+from ..sql import SafeSqlDriver, SqlDriver
 
 
 class IndexHealthCalc:
@@ -17,7 +16,9 @@ class IndexHealthCalc:
         if not invalid_indexes:
             return "No invalid indexes found."
 
-        return "Invalid indexes found: " + "\n".join([f"{idx['name']} on {idx['table']} is invalid." for idx in invalid_indexes])
+        return "Invalid indexes found: " + "\n".join(
+            [f"{idx['name']} on {idx['table']} is invalid." for idx in invalid_indexes]
+        )
 
     async def duplicate_index_check(self) -> str:
         indexes = await self._indexes()
@@ -32,7 +33,9 @@ class IndexHealthCalc:
             indexes_by_table[key].append(idx)
 
         # Check each valid non-primary/unique index for duplicates
-        for index in [i for i in indexes if i["valid"] and not i["primary"] and not i["unique"]]:
+        for index in [
+            i for i in indexes if i["valid"] and not i["primary"] and not i["unique"]
+        ]:
             table_indexes = indexes_by_table[(index["schema"], index["table"])]
 
             # Find covering indexes
@@ -52,7 +55,9 @@ class IndexHealthCalc:
                         or covering_idx["primary"]
                         or covering_idx["unique"]
                     ):
-                        dup_indexes.append({"unneeded_index": index, "covering_index": covering_idx})
+                        dup_indexes.append(
+                            {"unneeded_index": index, "covering_index": covering_idx}
+                        )
                         break
 
         if not dup_indexes:
@@ -70,7 +75,8 @@ class IndexHealthCalc:
         result = ["Duplicate indexes found:"]
         for dup in sorted_dups:
             result.append(
-                f"Index '{dup['unneeded_index']['name']}' on table '{dup['unneeded_index']['table']}' "
+                f"Index '{dup['unneeded_index']['name']}' on table "
+                f"'{dup['unneeded_index']['table']}' "
                 f"is covered by index '{dup['covering_index']['name']}'"
             )
 
@@ -80,7 +86,8 @@ class IndexHealthCalc:
         """Check for bloated indexes that are larger than min_size bytes.
 
         Args:
-            min_size: Minimum size in bytes to consider an index as bloated (default 100MB)
+            min_size: Minimum size in bytes to consider an index
+                as bloated (default 100MB)
 
         Returns:
             String describing any bloated indexes found
@@ -217,7 +224,7 @@ class IndexHealthCalc:
             ORDER BY
                 wastedbytes DESC,
                 index_name
-        """,
+        """,  # noqa: E501
             [min_size],
         )
 
@@ -230,7 +237,10 @@ class IndexHealthCalc:
         for idx in bloated_indexes_dicts:
             bloat_mb = int(idx["bloat_bytes"]) / (1024 * 1024)
             total_mb = int(idx["index_bytes"]) / (1024 * 1024)
-            result.append(f"Index '{idx['index']}' on table '{idx['table']}' has {bloat_mb:.1f}MB bloat out of {total_mb:.1f}MB total size")
+            result.append(
+                f"Index '{idx['index']}' on table '{idx['table']}' has "
+                f"{bloat_mb:.1f}MB bloat out of {total_mb:.1f}MB total size"
+            )
 
         return "\n".join(result)
 
@@ -239,7 +249,8 @@ class IndexHealthCalc:
             return self._cached_indexes
 
         # Get index information
-        results = await self.sql_driver.execute_query("""
+        results = await self.sql_driver.execute_query(
+            """
             SELECT
                 schemaname AS schema,
                 t.relname AS table,
@@ -264,7 +275,8 @@ class IndexHealthCalc:
                 schemaname IS NOT NULL
             ORDER BY
                 1, 2
-        """)
+        """  # noqa: E501
+        )
 
         if results is None:
             return []
@@ -298,7 +310,8 @@ class IndexHealthCalc:
         """Check for unused or rarely used indexes.
 
         Args:
-            max_scans: Maximum number of scans to consider an index as unused (default 50)
+            max_scans: Maximum number of scans to consider an index
+                as unused (default 50)
 
         Returns:
             String describing any unused indexes found
@@ -339,7 +352,9 @@ class IndexHealthCalc:
                 continue
             size_mb = int(idx["size_bytes"]) / (1024 * 1024)
             result.append(
-                f"Index '{idx['index']}' on table '{idx['table']}' has only been scanned {idx['index_scans']} times and uses {size_mb:.1f}MB of space"
+                f"Index '{idx['index']}' on table '{idx['table']}' has only "
+                f"been scanned {idx['index_scans']} times and uses "
+                f"{size_mb:.1f}MB of space"
             )
 
         return "\n".join(result)

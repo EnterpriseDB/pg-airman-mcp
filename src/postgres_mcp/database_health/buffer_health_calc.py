@@ -13,14 +13,17 @@ class BufferHealthCalc:
         """Calculate the index cache hit rate.
 
         Returns:
-            String describing the index cache hit rate as a percentage and comparison to threshold
+            String describing the index cache hit rate as a percentage
+            and comparison to threshold
         """
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT
                 (sum(idx_blks_hit)) / nullif(sum(idx_blks_hit + idx_blks_read), 0) AS rate
             FROM
                 pg_statio_user_indexes
-        """)
+        """  # noqa: E501
+        )
 
         result_list = [dict(x.cells) for x in result] if result else []
 
@@ -31,22 +34,31 @@ class BufferHealthCalc:
         threshold_pct = threshold * 100
 
         if hit_rate >= threshold_pct:
-            return f"Index cache hit rate: {hit_rate:.1f}% (above {threshold_pct:.1f}% threshold)"
+            return (
+                f"Index cache hit rate: {hit_rate:.1f}% "
+                f"(above {threshold_pct:.1f}% threshold)"
+            )
         else:
-            return f"Index cache hit rate: {hit_rate:.1f}% (below {threshold_pct:.1f}% threshold)"
+            return (
+                f"Index cache hit rate: {hit_rate:.1f}% "
+                f"(below {threshold_pct:.1f}% threshold)"
+            )
 
     async def table_hit_rate(self, threshold: float = 0.95) -> str:
         """Calculate the table cache hit rate.
 
         Returns:
-            String describing the table cache hit rate as a percentage and comparison to threshold
+            String describing the table cache hit rate as a percentage
+            and comparison to threshold
         """
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT
                 sum(heap_blks_hit) / nullif(sum(heap_blks_hit + heap_blks_read), 0) AS rate
             FROM
                 pg_statio_user_tables
-        """)
+        """  # noqa: E501
+        )
 
         result_list = [dict(x.cells) for x in result] if result else []
 
@@ -57,6 +69,12 @@ class BufferHealthCalc:
         threshold_pct = threshold * 100
 
         if hit_rate >= threshold_pct:
-            return f"Table cache hit rate: {hit_rate:.1f}% (above {threshold_pct:.1f}% threshold)"
+            return (
+                f"Table cache hit rate: {hit_rate:.1f}% "
+                f"(above {threshold_pct:.1f}% threshold)"
+            )
         else:
-            return f"Table cache hit rate: {hit_rate:.1f}% (below {threshold_pct:.1f}% threshold)"
+            return (
+                f"Table cache hit rate: {hit_rate:.1f}% "
+                f"(below {threshold_pct:.1f}% threshold)"
+            )

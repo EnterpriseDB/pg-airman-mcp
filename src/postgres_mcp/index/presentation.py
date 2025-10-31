@@ -3,17 +3,13 @@
 import logging
 import os
 from typing import Any
-from typing import Dict
-from typing import List
 
 import humanize
 
-from ..artifacts import ExplainPlanArtifact
-from ..artifacts import calculate_improvement_multiple
+from ..artifacts import ExplainPlanArtifact, calculate_improvement_multiple
 from ..sql import SqlDriver
 from .dta_calc import IndexTuningBase
-from .index_opt_base import IndexDefinition
-from .index_opt_base import IndexTuningResult
+from .index_opt_base import IndexDefinition, IndexTuningResult
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +119,15 @@ class TextPresentation:
             )
 
             # Prepare the response to send back to the caller
-            include_langfuse_trace = os.environ.get("POSTGRES_MCP_INCLUDE_LANGFUSE_TRACE", "true").lower() == "true"
-            langfuse_trace = {"_langfuse_trace": session.dta_traces} if include_langfuse_trace else {}
+            include_langfuse_trace = (
+                os.environ.get("POSTGRES_MCP_INCLUDE_LANGFUSE_TRACE", "true").lower()
+                == "true"
+            )
+            langfuse_trace = (
+                {"_langfuse_trace": session.dta_traces}
+                if include_langfuse_trace
+                else {}
+            )
 
             if session.error:
                 return {
@@ -139,12 +142,24 @@ class TextPresentation:
                 }
 
             # Calculate overall statistics
-            total_size_bytes = sum(rec.estimated_size_bytes for rec in session.recommendations)
+            total_size_bytes = sum(
+                rec.estimated_size_bytes for rec in session.recommendations
+            )
 
             # Calculate overall performance improvement
-            initial_cost = session.recommendations[0].progressive_base_cost if session.recommendations else 0
-            new_cost = session.recommendations[-1].progressive_recommendation_cost if session.recommendations else 1.0
-            improvement_multiple = calculate_improvement_multiple(initial_cost, new_cost)
+            initial_cost = (
+                session.recommendations[0].progressive_base_cost
+                if session.recommendations
+                else 0
+            )
+            new_cost = (
+                session.recommendations[-1].progressive_recommendation_cost
+                if session.recommendations
+                else 1.0
+            )
+            improvement_multiple = calculate_improvement_multiple(
+                initial_cost, new_cost
+            )
 
             # Build recommendations list
             recommendations = self._build_recommendations_list(session)
@@ -152,7 +167,8 @@ class TextPresentation:
             # Generate query impact section using helper function
             query_impact = await self._generate_query_impact(session)
 
-            # Create the result JSON object with summary, recommendations, and query impact
+            # Create the result JSON object with summary, recommendations,
+            # and query impact
             return {
                 "summary": {
                     "total_recommendations": len(session.recommendations),
@@ -169,7 +185,9 @@ class TextPresentation:
             logger.error(f"Error analyzing queries: {e}", exc_info=True)
             return {"error": f"Error analyzing queries: {e}"}
 
-    def _build_recommendations_list(self, session: IndexTuningResult) -> List[Dict[str, Any]]:
+    def _build_recommendations_list(
+        self, session: IndexTuningResult
+    ) -> list[dict[str, Any]]:
         recommendations = []
         for index_apply_order, rec in enumerate(session.recommendations):
             rec_dict = {
@@ -177,12 +195,16 @@ class TextPresentation:
                 "index_target_table": rec.table,
                 "index_target_columns": rec.columns,
                 "benefit_of_this_index_only": {
-                    "improvement_multiple": f"{rec.individual_improvement_multiple:.1f}",
+                    "improvement_multiple": (
+                        f"{rec.individual_improvement_multiple:.1f}"
+                    ),
                     "base_cost": f"{rec.individual_base_cost:.1f}",
                     "new_cost": f"{rec.individual_recommendation_cost:.1f}",
                 },
                 "benefit_after_previous_indexes": {
-                    "improvement_multiple": f"{rec.progressive_improvement_multiple:.1f}",
+                    "improvement_multiple": (
+                        f"{rec.progressive_improvement_multiple:.1f}"
+                    ),
                     "base_cost": f"{rec.progressive_base_cost:.1f}",
                     "new_cost": f"{rec.progressive_recommendation_cost:.1f}",
                 },
@@ -191,16 +213,21 @@ class TextPresentation:
             }
             if rec.potential_problematic_reason == "long_text_column":
                 rec_dict["warning"] = (
-                    "This index is potentially problematic because it includes a long text column. "
-                    "You might not be able to create this index if the index row size becomes too large "
-                    "(i.e., more than 8191 bytes)."
+                    "This index is potentially problematic because it includes a long "
+                    "text column. You might not be able to create this index if the "
+                    "index row size becomes too large (i.e., more than 8191 bytes)."
                 )
             elif rec.potential_problematic_reason:
-                rec_dict["warning"] = f"This index is potentially problematic because it includes a {rec.potential_problematic_reason} column."
+                rec_dict["warning"] = (
+                    "This index is potentially problematic because it includes "
+                    f"a {rec.potential_problematic_reason} column."
+                )
             recommendations.append(rec_dict)
         return recommendations
 
-    async def _generate_query_impact(self, session: IndexTuningResult) -> List[Dict[str, Any]]:
+    async def _generate_query_impact(
+        self, session: IndexTuningResult
+    ) -> list[dict[str, Any]]:
         """
         Generate the query impact section showing before/after explain plans.
 
@@ -231,11 +258,18 @@ class TextPresentation:
         if unique_queries and self.index_tuning:
             for query in unique_queries:
                 # Get plan with no indexes
-                before_plan = await self.index_tuning.get_explain_plan_with_indexes(query, frozenset())
+                before_plan = await self.index_tuning.get_explain_plan_with_indexes(
+                    query, frozenset()
+                )
 
                 # Get plan with all recommended indexes
-                index_configs = frozenset(IndexDefinition(rec.table, rec.columns, rec.using) for rec in session.recommendations)
-                after_plan = await self.index_tuning.get_explain_plan_with_indexes(query, index_configs)
+                index_configs = frozenset(
+                    IndexDefinition(rec.table, rec.columns, rec.using)
+                    for rec in session.recommendations
+                )
+                after_plan = await self.index_tuning.get_explain_plan_with_indexes(
+                    query, index_configs
+                )
 
                 # Extract costs from plans
                 base_cost = self.index_tuning.extract_cost_from_json_plan(before_plan)
@@ -244,11 +278,15 @@ class TextPresentation:
                 # Calculate improvement multiple
                 improvement_multiple = "∞"  # Default for cases where new_cost is zero
                 if new_cost > 0 and base_cost > 0:
-                    improvement_multiple = f"{calculate_improvement_multiple(base_cost, new_cost):.1f}"
+                    improvement_multiple = (
+                        f"{calculate_improvement_multiple(base_cost, new_cost):.1f}"
+                    )
 
                 before_plan_text = ExplainPlanArtifact.format_plan_summary(before_plan)
                 after_plan_text = ExplainPlanArtifact.format_plan_summary(after_plan)
-                diff_text = ExplainPlanArtifact.create_plan_diff(before_plan, after_plan)
+                diff_text = ExplainPlanArtifact.create_plan_diff(
+                    before_plan, after_plan
+                )
 
                 # Add to query impact with costs and improvement
                 query_impact.append(

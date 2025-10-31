@@ -3,8 +3,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from . import server
-from . import top_queries
+from . import server, top_queries
 
 load_dotenv()
 

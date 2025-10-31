@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..artifacts import ErrorResult
-from ..artifacts import ExplainPlanArtifact
-from ..sql import IndexDefinition
-from ..sql import SafeSqlDriver
-from ..sql import SqlBindParams
-from ..sql import check_postgres_version_requirement
+from ..artifacts import ErrorResult, ExplainPlanArtifact
+from ..sql import (
+    IndexDefinition,
+    SafeSqlDriver,
+    SqlBindParams,
+    check_postgres_version_requirement,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ class ExplainPlanTool:
     def __init__(self, sql_driver: SqlDriver):
         self.sql_driver = sql_driver
 
-    async def replace_query_parameters_if_needed(self, sql_query: str) -> tuple[str, bool]:
+    async def replace_query_parameters_if_needed(
+        self, sql_query: str
+    ) -> tuple[str, bool]:
         """Replace bind variables with sample values in a query."""
         use_generic_plan = False
         has_bind_variables = self._has_bind_variables(sql_query)
@@ -35,8 +37,13 @@ class ExplainPlanTool:
         if has_bind_variables:
             has_like = self._has_like_expressions(sql_query)
 
-            meets_pg_version_requirement, _message = await check_postgres_version_requirement(
-                self.sql_driver, min_version=16, feature_name="Generic plan with bind variables ($1, $2, etc.)"
+            (
+                meets_pg_version_requirement,
+                _message,
+            ) = await check_postgres_version_requirement(
+                self.sql_driver,
+                min_version=16,
+                feature_name="Generic plan with bind variables ($1, $2, etc.)",
             )
 
             # If PostgreSQL < 16 or the query has LIKE expressions (which don't work with GENERIC_PLAN)
@@ -44,7 +51,9 @@ class ExplainPlanTool:
                 # Replace bind variables with sample values
                 logger.debug("Replacing bind variables with sample values in query")
                 if meets_pg_version_requirement and has_like:
-                    logger.debug("LIKE expressions detected, using parameter replacement instead of GENERIC_PLAN")
+                    logger.debug(
+                        "LIKE expressions detected, using parameter replacement instead of GENERIC_PLAN"
+                    )
                 bind_params = SqlBindParams(self.sql_driver)
                 modified_query = await bind_params.replace_parameters(sql_query)
                 logger.debug(f"Original query: {sql_query}")
@@ -55,7 +64,9 @@ class ExplainPlanTool:
 
         return sql_query, use_generic_plan
 
-    async def explain(self, sql_query: str, do_analyze: bool = False) -> ExplainPlanArtifact | ErrorResult:
+    async def explain(
+        self, sql_query: str, do_analyze: bool = False
+    ) -> ExplainPlanArtifact | ErrorResult:
         """
         Generate an EXPLAIN plan for a SQL query.
 
@@ -65,10 +76,17 @@ class ExplainPlanTool:
         Returns:
             ExplainPlanArtifact or ErrorResult
         """
-        modified_sql_query, use_generic_plan = await self.replace_query_parameters_if_needed(sql_query)
-        return await self._run_explain_query(modified_sql_query, analyze=do_analyze, generic_plan=use_generic_plan)
+        (
+            modified_sql_query,
+            use_generic_plan,
+        ) = await self.replace_query_parameters_if_needed(sql_query)
+        return await self._run_explain_query(
+            modified_sql_query, analyze=do_analyze, generic_plan=use_generic_plan
+        )
 
-    async def explain_analyze(self, sql_query: str) -> ExplainPlanArtifact | ErrorResult:
+    async def explain_analyze(
+        self, sql_query: str
+    ) -> ExplainPlanArtifact | ErrorResult:
         """
         Generate an EXPLAIN ANALYZE plan for a SQL query.
 
@@ -96,11 +114,15 @@ class ExplainPlanTool:
         try:
             # Validate index definitions format
             if not isinstance(hypothetical_indexes, list):
-                return ErrorResult(f"Expected list of index definitions, got {type(hypothetical_indexes)}")
+                return ErrorResult(
+                    f"Expected list of index definitions, got {type(hypothetical_indexes)}"
+                )
 
             for idx in hypothetical_indexes:
                 if not isinstance(idx, dict):
-                    return ErrorResult(f"Expected dictionary for index definition, got {type(idx)}")
+                    return ErrorResult(
+                        f"Expected dictionary for index definition, got {type(idx)}"
+                    )
                 if "table" not in idx:
                     return ErrorResult("Missing 'table' in index definition")
                 if "columns" not in idx:
@@ -108,9 +130,15 @@ class ExplainPlanTool:
                 if not isinstance(idx["columns"], list):
                     # Try to convert to list if it's not already
                     try:
-                        idx["columns"] = list(idx["columns"]) if hasattr(idx["columns"], "__iter__") else [idx["columns"]]
+                        idx["columns"] = (
+                            list(idx["columns"])
+                            if hasattr(idx["columns"], "__iter__")
+                            else [idx["columns"]]
+                        )
                     except Exception as e:
-                        return ErrorResult(f"Expected list for 'columns', got {type(idx['columns'])}: {e}")
+                        return ErrorResult(
+                            f"Expected list for 'columns', got {type(idx['columns'])}: {e}"
+                        )
 
             # Convert the index definitions to IndexConfig objects
             indexes = frozenset(
@@ -123,14 +151,25 @@ class ExplainPlanTool:
             )
 
             # Check if the query contains bind variables
-            modified_sql_query, use_generic_plan = await self.replace_query_parameters_if_needed(sql_query)
+            (
+                modified_sql_query,
+                use_generic_plan,
+            ) = await self.replace_query_parameters_if_needed(sql_query)
 
             # Generate the explain plan using the static method
-            plan_data = await self.generate_explain_plan_with_hypothetical_indexes(modified_sql_query, indexes, use_generic_plan)
+            plan_data = await self.generate_explain_plan_with_hypothetical_indexes(
+                modified_sql_query, indexes, use_generic_plan
+            )
 
             # Check if we got a valid plan
-            if not plan_data or not isinstance(plan_data, dict) or "Plan" not in plan_data:
-                return ErrorResult("Failed to generate a valid explain plan with the hypothetical indexes")
+            if (
+                not plan_data
+                or not isinstance(plan_data, dict)
+                or "Plan" not in plan_data
+            ):
+                return ErrorResult(
+                    "Failed to generate a valid explain plan with the hypothetical indexes"
+                )
 
             try:
                 # Convert the plan data to an ExplainPlanArtifact
@@ -139,8 +178,12 @@ class ExplainPlanTool:
                 return ErrorResult(f"Error converting explain plan: {e}")
 
         except Exception as e:
-            logger.error(f"Error in explain_with_hypothetical_indexes: {e}", exc_info=True)
-            return ErrorResult(f"Error generating explain plan with hypothetical indexes: {e}")
+            logger.error(
+                f"Error in explain_with_hypothetical_indexes: {e}", exc_info=True
+            )
+            return ErrorResult(
+                f"Error generating explain plan with hypothetical indexes: {e}"
+            )
 
     def _has_bind_variables(self, query: str) -> bool:
         """Check if a query contains bind variables ($1, $2, etc)."""
@@ -150,7 +193,9 @@ class ExplainPlanTool:
         """Check if a query contains LIKE expressions, which don't work with GENERIC_PLAN."""
         return bool(re.search(r"\bLIKE\b", query, re.IGNORECASE))
 
-    async def _run_explain_query(self, query: str, analyze: bool = False, generic_plan: bool = False) -> ExplainPlanArtifact | ErrorResult:
+    async def _run_explain_query(
+        self, query: str, analyze: bool = False, generic_plan: bool = False
+    ) -> ExplainPlanArtifact | ErrorResult:
         try:
             explain_options = ["FORMAT JSON"]
             if analyze:
@@ -167,18 +212,24 @@ class ExplainPlanTool:
             query_plan_data = rows[0].cells["QUERY PLAN"]
 
             if not isinstance(query_plan_data, list):
-                return ErrorResult(f"Expected list from EXPLAIN, got {type(query_plan_data)}")
+                return ErrorResult(
+                    f"Expected list from EXPLAIN, got {type(query_plan_data)}"
+                )
             if len(query_plan_data) == 0:
                 return ErrorResult("No results returned from EXPLAIN")
 
             plan_dict = query_plan_data[0]
             if not isinstance(plan_dict, dict):
-                return ErrorResult(f"Expected dict in EXPLAIN result list, got {type(plan_dict)} with value {plan_dict}")
+                return ErrorResult(
+                    f"Expected dict in EXPLAIN result list, got {type(plan_dict)} with value {plan_dict}"
+                )
 
             try:
                 return ExplainPlanArtifact.from_json_data(plan_dict)
             except Exception as e:
-                return ErrorResult(f"Internal error converting explain plan - do not retry: {e}")
+                return ErrorResult(
+                    f"Internal error converting explain plan - do not retry: {e}"
+                )
         except Exception as e:
             return ErrorResult(f"Error executing explain plan: {e}")
 

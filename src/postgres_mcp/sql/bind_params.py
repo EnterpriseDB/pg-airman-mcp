@@ -5,14 +5,16 @@ import re
 from typing import Any
 
 from pglast import parse_sql
-from pglast.ast import A_Expr
-from pglast.ast import ColumnRef
-from pglast.ast import JoinExpr
-from pglast.ast import Node
-from pglast.ast import RangeVar
-from pglast.ast import SelectStmt
-from pglast.ast import SortBy
-from pglast.ast import SortGroupClause
+from pglast.ast import (
+    A_Expr,
+    ColumnRef,
+    JoinExpr,
+    Node,
+    RangeVar,
+    SelectStmt,
+    SortBy,
+    SortGroupClause,
+)
 from pglast.visitors import Visitor
 
 from .safe_sql import SafeSqlDriver
@@ -55,7 +57,8 @@ class TableAliasVisitor(Visitor):
 
 class ColumnCollector(Visitor):
     """
-    Collects columns used in WHERE, JOIN, ORDER BY, GROUP BY, HAVING, and SELECT clauses.
+    Collects columns used in WHERE, JOIN, ORDER BY, GROUP BY, HAVING,
+    and SELECT clauses.
     With improved handling of column aliases.
     """
 
@@ -124,7 +127,9 @@ class ColumnCollector(Visitor):
         # Handle GROUP BY clause
         if hasattr(node, "groupClause") and node.groupClause:
             for group_item in node.groupClause:
-                if isinstance(group_item, SortGroupClause) and isinstance(group_item.tleSortGroupRef, int):
+                if isinstance(group_item, SortGroupClause) and isinstance(
+                    group_item.tleSortGroupRef, int
+                ):
                     ref_index = group_item.tleSortGroupRef
                     if self.target_list and ref_index <= len(self.target_list):
                         target_entry = self.target_list[ref_index - 1]  # 1-based index
@@ -157,7 +162,11 @@ class ColumnCollector(Visitor):
             return
 
         # If it's a simple column reference, it might be an alias
-        if isinstance(sort_item.node, ColumnRef) and hasattr(sort_item.node, "fields") and sort_item.node.fields:
+        if (
+            isinstance(sort_item.node, ColumnRef)
+            and hasattr(sort_item.node, "fields")
+            and sort_item.node.fields
+        ):
             fields = [f.sval for f in sort_item.node.fields if hasattr(f, "sval")]
             if len(fields) == 1:
                 col_name = fields[0]
@@ -181,14 +190,18 @@ class ColumnCollector(Visitor):
             fields = [f.sval if hasattr(f, "sval") else "*" for f in node.fields]
 
             # Skip collecting if this is a reference to a column alias
-            if len(fields) == 1 and (fields[0] == "*" or fields[0] in self.column_aliases):
+            if len(fields) == 1 and (
+                fields[0] == "*" or fields[0] in self.column_aliases
+            ):
                 return
 
             if len(fields) == 2 and fields[1] == "*":
                 return
 
             # Use current scope's tables and aliases
-            current_tables, current_aliases = self.context_stack[-1] if self.context_stack else ({}, {})
+            current_tables, current_aliases = (
+                self.context_stack[-1] if self.context_stack else ({}, {})
+            )
 
             if len(fields) == 2:  # Qualified column (e.g., u.name)
                 table_or_alias, column = fields
@@ -229,7 +242,9 @@ class ColumnCollector(Visitor):
                 if isinstance(node.lexpr, SelectStmt):
                     alias_visitor = TableAliasVisitor()
                     alias_visitor(node.lexpr)
-                    self.context_stack.append((alias_visitor.tables, alias_visitor.aliases))
+                    self.context_stack.append(
+                        (alias_visitor.tables, alias_visitor.aliases)
+                    )
                     self(node.lexpr)
                     self.context_stack.pop()
 
@@ -238,19 +253,29 @@ class ColumnCollector(Visitor):
                 if isinstance(node.rexpr, SelectStmt):
                     alias_visitor = TableAliasVisitor()
                     alias_visitor(node.rexpr)
-                    self.context_stack.append((alias_visitor.tables, alias_visitor.aliases))
+                    self.context_stack.append(
+                        (alias_visitor.tables, alias_visitor.aliases)
+                    )
                     self(node.rexpr)
                     self.context_stack.pop()
                 else:
                     self(node.rexpr)
 
             # Special handling for IN clauses with subqueries
-            if hasattr(node, "kind") and node.kind == 0:  # 0 is the kind for IN operator
-                if hasattr(node, "rexpr") and node.rexpr and isinstance(node.rexpr, SelectStmt):
+            if (
+                hasattr(node, "kind") and node.kind == 0
+            ):  # 0 is the kind for IN operator
+                if (
+                    hasattr(node, "rexpr")
+                    and node.rexpr
+                    and isinstance(node.rexpr, SelectStmt)
+                ):
                     # Process the subquery in the IN clause
                     alias_visitor = TableAliasVisitor()
                     alias_visitor(node.rexpr)
-                    self.context_stack.append((alias_visitor.tables, alias_visitor.aliases))
+                    self.context_stack.append(
+                        (alias_visitor.tables, alias_visitor.aliases)
+                    )
                     self(node.rexpr)
                     self.context_stack.pop()
 
@@ -258,7 +283,9 @@ class ColumnCollector(Visitor):
         """
         Visit a JoinExpr node to handle JOIN conditions.
         """
-        if isinstance(node, JoinExpr) and self.inside_select:  # Type narrowing for JoinExpr
+        if (
+            isinstance(node, JoinExpr) and self.inside_select
+        ):  # Type narrowing for JoinExpr
             if hasattr(node, "larg") and node.larg:
                 self(node.larg)
             if hasattr(node, "rarg") and node.rarg:
@@ -285,7 +312,9 @@ class SqlBindParams:
         self._column_stats_cache = {}
 
     async def replace_parameters(self, query: str) -> str:
-        """Replace parameter placeholders with appropriate values based on column statistics.
+        """
+        Replace parameter placeholders with appropriate values based
+        on column statistics.
 
         This handles queries from pg_stat_statements where literals
         have been replaced with $1, $2, etc.
@@ -298,19 +327,26 @@ class SqlBindParams:
                 logger.debug(f"No parameters found for query: {query[:50]}...")
                 return query
 
-            # Handle common special cases in a specific order to prevent incorrect replacements
+            # Handle common special cases in a specific order
+            # to prevent incorrect replacements
 
             # 1. Handle LIMIT clauses - these should always be replaced with integers
             limit_pattern = re.compile(r"limit\s+\$(\d+)", re.IGNORECASE)
             modified_query = limit_pattern.sub(r"limit 100", modified_query)
 
             # 2. Handle static INTERVAL expressions
-            interval_pattern = re.compile(r"interval\s+'(\d+)\s+([a-z]+)'", re.IGNORECASE)
-            modified_query = interval_pattern.sub(lambda m: f"interval '2 {m.group(2)}'", modified_query)
+            interval_pattern = re.compile(
+                r"interval\s+'(\d+)\s+([a-z]+)'", re.IGNORECASE
+            )
+            modified_query = interval_pattern.sub(
+                lambda m: f"interval '2 {m.group(2)}'", modified_query
+            )
 
             # 3. Handle parameterized INTERVAL expressions (INTERVAL $1)
             param_interval_pattern = re.compile(r"interval\s+\$(\d+)", re.IGNORECASE)
-            modified_query = param_interval_pattern.sub("interval '2 days'", modified_query)
+            modified_query = param_interval_pattern.sub(
+                "interval '2 days'", modified_query
+            )
 
             # 4. Handle OFFSET clauses - similar to LIMIT
             offset_pattern = re.compile(r"offset\s+\$(\d+)", re.IGNORECASE)
@@ -322,7 +358,9 @@ class SqlBindParams:
                 return modified_query
 
             # Then, handle BETWEEN clauses as special cases
-            between_pattern = re.compile(r"(\w+(?:\.\w+)?)\s+between\s+\$(\d+)\s+and\s+\$(\d+)", re.IGNORECASE)
+            between_pattern = re.compile(
+                r"(\w+(?:\.\w+)?)\s+between\s+\$(\d+)\s+and\s+\$(\d+)", re.IGNORECASE
+            )
             for match in between_pattern.finditer(query):
                 column_ref, param1, param2 = match.groups()
                 # Extract table and column name from the reference
@@ -360,8 +398,12 @@ class SqlBindParams:
                 # Replace both parameters in the BETWEEN clause
                 param1_pattern = r"\$" + param1
                 param2_pattern = r"\$" + param2
-                modified_query = re.sub(param1_pattern, str(lower_bound), modified_query)
-                modified_query = re.sub(param2_pattern, str(upper_bound), modified_query)
+                modified_query = re.sub(
+                    param1_pattern, str(lower_bound), modified_query
+                )
+                modified_query = re.sub(
+                    param2_pattern, str(upper_bound), modified_query
+                )
 
             # Now handle remaining parameters normally
             # Recompute matches after BETWEEN replacements
@@ -393,7 +435,9 @@ class SqlBindParams:
                 preceding_text = modified_query[clause_start : param_position + 2]
 
                 # Try to identify which column this parameter belongs to
-                column_info = self._identify_parameter_column(preceding_text, table_columns)
+                column_info = self._identify_parameter_column(
+                    preceding_text, table_columns
+                )
                 if column_info:
                     table_name, column_name = column_info
                     stats = await self._get_column_statistics(table_name, column_name)
@@ -404,7 +448,11 @@ class SqlBindParams:
                 else:
                     replacement = self._get_generic_replacement(preceding_text)
 
-                modified_query = modified_query[: match.start()] + replacement + modified_query[match.end() :]
+                modified_query = (
+                    modified_query[: match.start()]
+                    + replacement
+                    + modified_query[match.end() :]
+                )
 
             return modified_query
         except Exception as e:
@@ -440,16 +488,28 @@ class SqlBindParams:
                     if isinstance(most_common, float):
                         # Small +/- adjustment around most common value
                         adjustment = abs(most_common) * 0.05 if most_common != 0 else 1
-                        return most_common - adjustment if is_lower else most_common + adjustment
+                        return (
+                            most_common - adjustment
+                            if is_lower
+                            else most_common + adjustment
+                        )
                     if isinstance(most_common, int):
                         # Small +/- adjustment around most common value
                         adjustment = abs(most_common) * 0.05 if most_common != 0 else 1
-                        return int(most_common - adjustment) if is_lower else int(most_common + adjustment)
+                        return (
+                            int(most_common - adjustment)
+                            if is_lower
+                            else int(most_common + adjustment)
+                        )
                     elif isinstance(most_common, str) and most_common.isdigit():
                         # For string digits, convert and adjust
                         num_val = float(most_common)
                         adjustment = abs(num_val) * 0.05 if num_val != 0 else 1
-                        return str(int(num_val - adjustment)) if is_lower else str(int(num_val + adjustment))
+                        return (
+                            str(int(num_val - adjustment))
+                            if is_lower
+                            else str(int(num_val + adjustment))
+                        )
                     else:
                         # For non-numeric, just use most common
                         return most_common
@@ -474,7 +534,11 @@ class SqlBindParams:
             return histogram_bounds[bound_idx]
 
         # Fall back to standard statistics if available
-        most_common = stats.get("most_common_vals", [None])[0] if stats.get("most_common_vals") else None
+        most_common = (
+            stats.get("most_common_vals", [None])[0]
+            if stats.get("most_common_vals")
+            else None
+        )
         if most_common is not None:
             return most_common
 
@@ -526,7 +590,9 @@ class SqlBindParams:
             logger.error(f"Error extracting table aliases: {e}", exc_info=True)
             return [table_name]  # Fallback to just the table name
 
-    def _identify_parameter_column(self, context: str, table_columns: dict[str, set[str]]) -> tuple[str, str] | None:
+    def _identify_parameter_column(
+        self, context: str, table_columns: dict[str, set[str]]
+    ) -> tuple[str, str] | None:
         """Identify which column a parameter likely belongs to based on context."""
         # Look for patterns like "column_name = $1" or "column_name IN ($1)"
         for table, columns in table_columns.items():
@@ -540,7 +606,8 @@ class SqlBindParams:
                     rf"{column}\s*<\s*\$\d+",  # column < $1
                     rf"{column}\s*>=\s*\$\d+",  # column >= $1
                     rf"{column}\s*<=\s*\$\d+",  # column <= $1
-                    rf"{column}\s+between\s+\$\d+\s+and\s+\$\d+",  # column between $1 and $2
+                    # column between $1 and $2
+                    rf"{column}\s+between\s+\$\d+\s+and\s+\$\d+",
                 ]
 
                 for pattern in patterns:
@@ -549,7 +616,9 @@ class SqlBindParams:
 
         return None
 
-    async def _get_column_statistics(self, table_name: str, column_name: str) -> dict[str, Any] | None:
+    async def _get_column_statistics(
+        self, table_name: str, column_name: str
+    ) -> dict[str, Any] | None:
         """Get statistics for a column from pg_stats."""
         # Create a cache key from table and column name
         cache_key = f"{table_name}.{column_name}"
@@ -595,7 +664,10 @@ class SqlBindParams:
                         # Parse array literals like '{val1,val2}' into Python lists
                         array_str = stats[key].strip("{}")
                         if array_str:
-                            stats[key] = [self._parse_pg_array_value(val) for val in array_str.split(",")]
+                            stats[key] = [
+                                self._parse_pg_array_value(val)
+                                for val in array_str.split(",")
+                            ]
                         else:
                             stats[key] = []
 
@@ -603,7 +675,9 @@ class SqlBindParams:
             self._column_stats_cache[cache_key] = stats
             return stats
         except Exception as e:
-            logger.warning(f"Error getting column statistics for {table_name}.{column_name}: {e}")
+            logger.warning(
+                f"Error getting column statistics for {table_name}.{column_name}: {e}"
+            )
             self._column_stats_cache[cache_key] = None
             return None
 
@@ -700,11 +774,15 @@ class SqlBindParams:
         return "'sample_value'"
 
     def _get_generic_replacement(self, context: str) -> str:
-        """Provide a generic replacement when we can't determine the specific column type."""
+        """
+        Provide a generic replacement when we can't determine the specific column type.
+        """
         context = context.lower()
 
         # Try to guess based on context
-        if any(date_word in context.split() for date_word in ["date", "timestamp", "time"]):
+        if any(
+            date_word in context.split() for date_word in ["date", "timestamp", "time"]
+        ):
             return "'2023-01-01'"
 
         if any(word in context for word in ["id", "key", "code", "num"]):
@@ -776,7 +854,10 @@ class SqlBindParams:
             return f"{col_name} {op} '2023-01-01'"
 
         # Numeric-looking columns
-        if any(word in col_name for word in ["amount", "price", "cost", "count", "num", "qty"]):
+        if any(
+            word in col_name
+            for word in ["amount", "price", "cost", "count", "num", "qty"]
+        ):
             return f"{col_name} {op} 46.5"
 
         # Status-like columns (likely string enums)

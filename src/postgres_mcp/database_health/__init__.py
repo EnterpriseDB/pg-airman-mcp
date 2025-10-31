@@ -1,4 +1,3 @@
-from .database_health import DatabaseHealthTool
-from .database_health import HealthType
+from .database_health import DatabaseHealthTool, HealthType
 
 __all__ = ["DatabaseHealthTool", "HealthType"]

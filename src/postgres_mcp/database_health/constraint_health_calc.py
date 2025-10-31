@@ -31,16 +31,22 @@ class ConstraintHealthCalc:
         for metric in metrics:
             if metric.referenced_table:
                 result.append(
-                    f"Constraint '{metric.name}' on table '{metric.schema}.{metric.table}' "
-                    f"referencing '{metric.referenced_schema}.{metric.referenced_table}' is invalid"
+                    f"Constraint '{metric.name}' on table "
+                    f"'{metric.schema}.{metric.table}' "
+                    f"referencing "
+                    f"'{metric.referenced_schema}.{metric.referenced_table}' is invalid"
                 )
             else:
-                result.append(f"Constraint '{metric.name}' on table '{metric.schema}.{metric.table}' is invalid")
+                result.append(
+                    f"Constraint '{metric.name}' on table "
+                    f"'{metric.schema}.{metric.table}' is invalid"
+                )
         return "\n".join(result)
 
     async def _get_invalid_constraints(self) -> list[ConstraintMetrics]:
         """Get all invalid constraints in the database."""
-        results = await self.sql_driver.execute_query("""
+        results = await self.sql_driver.execute_query(
+            """
             SELECT
                 nsp.nspname AS schema,
                 rel.relname AS table,
@@ -59,7 +65,8 @@ class ConstraintHealthCalc:
                 pg_catalog.pg_namespace fnsp ON fnsp.oid = frel.relnamespace
             WHERE
                 con.convalidated = 'f'
-        """)
+        """
+        )
 
         if not results:
             return []
@@ -79,10 +86,12 @@ class ConstraintHealthCalc:
 
     async def _get_total_constraints(self) -> int:
         """Get the total number of constraints."""
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT COUNT(*) as count
             FROM information_schema.table_constraints
-        """)
+        """
+        )
         if not result:
             return 0
         result_list = [dict(x.cells) for x in result]
@@ -90,11 +99,13 @@ class ConstraintHealthCalc:
 
     async def _get_active_constraints(self) -> int:
         """Get the number of active constraints."""
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT COUNT(*) as count
             FROM information_schema.table_constraints
             WHERE is_deferrable = 'NO'
-        """)
+        """
+        )
         if not result:
             return 0
         result_list = [dict(x.cells) for x in result]

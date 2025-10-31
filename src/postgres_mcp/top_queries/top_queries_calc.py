@@ -1,13 +1,8 @@
 import logging
-from typing import Literal
-from typing import LiteralString
-from typing import Union
-from typing import cast
+from typing import Literal, LiteralString, cast
 
-from ..sql import SafeSqlDriver
-from ..sql import SqlDriver
-from ..sql.extension_utils import check_extension
-from ..sql.extension_utils import get_postgres_version
+from ..sql import SafeSqlDriver, SqlDriver
+from ..sql.extension_utils import check_extension, get_postgres_version
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +27,12 @@ install_pg_stat_statements_message = (
 class TopQueriesCalc:
     """Tool for retrieving the slowest SQL queries."""
 
-    def __init__(self, sql_driver: Union[SqlDriver, SafeSqlDriver]):
+    def __init__(self, sql_driver: SqlDriver | SafeSqlDriver):
         self.sql_driver = sql_driver
 
-    async def get_top_queries_by_time(self, limit: int = 10, sort_by: Literal["total", "mean"] = "mean") -> str:
+    async def get_top_queries_by_time(
+        self, limit: int = 10, sort_by: Literal["total", "mean"] = "mean"
+    ) -> str:
         """Reports the slowest SQL queries based on execution time.
 
         Args:
@@ -47,7 +44,9 @@ class TopQueriesCalc:
             A string with the top queries or installation instructions
         """
         try:
-            logger.debug(f"Getting top queries by time. limit={limit}, sort_by={sort_by}")
+            logger.debug(
+                f"Getting top queries by time. limit={limit}, sort_by={sort_by}"
+            )
             extension_status = await check_extension(
                 self.sql_driver,
                 PG_STAT_STATEMENTS,
@@ -73,7 +72,9 @@ class TopQueriesCalc:
                 total_time_col = "total_time"
                 mean_time_col = "mean_time"
 
-            logger.debug(f"Using time columns: total={total_time_col}, mean={mean_time_col}")
+            logger.debug(
+                f"Using time columns: total={total_time_col}, mean={mean_time_col}"
+            )
 
             # Determine which column to sort by based on sort_by parameter and version
             order_by_column = total_time_col if sort_by == "total" else mean_time_col
@@ -95,7 +96,9 @@ class TopQueriesCalc:
                 query,
                 [limit],
             )
-            slow_queries = [row.cells for row in slow_query_rows] if slow_query_rows else []
+            slow_queries = (
+                [row.cells for row in slow_query_rows] if slow_query_rows else []
+            )
             logger.info(f"Found {len(slow_queries)} slow queries")
 
             # Create result description based on sort criteria
@@ -122,7 +125,9 @@ class TopQueriesCalc:
         """
 
         try:
-            logger.debug(f"Getting top resource queries with threshold {frac_threshold}")
+            logger.debug(
+                f"Getting top resource queries with threshold {frac_threshold}"
+            )
             extension_status = await check_extension(
                 self.sql_driver,
                 PG_STAT_STATEMENTS,
@@ -194,7 +199,7 @@ class TopQueriesCalc:
                     OR shared_blks_dirtied_frac > {frac_threshold}
                     OR total_wal_bytes_frac > {frac_threshold}
                 ORDER BY total_exec_time DESC
-            """,
+            """,  # noqa: E501
             )
 
             logger.debug(f"Executing query: {query}")
@@ -202,10 +207,14 @@ class TopQueriesCalc:
                 self.sql_driver,
                 query,
             )
-            resource_queries = [row.cells for row in slow_query_rows] if slow_query_rows else []
+            resource_queries = (
+                [row.cells for row in slow_query_rows] if slow_query_rows else []
+            )
             logger.info(f"Found {len(resource_queries)} resource-intensive queries")
 
             return str(resource_queries)
         except Exception as e:
-            logger.error(f"Error getting resource-intensive queries: {e}", exc_info=True)
+            logger.error(
+                f"Error getting resource-intensive queries: {e}", exc_info=True
+            )
             return f"Error resource-intensive queries: {e}"

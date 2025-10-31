@@ -7,32 +7,27 @@ import signal
 import sys
 import threading
 from enum import Enum
-from typing import Any
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Union
+from typing import Any, Literal
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
-from pydantic import Field
-from pydantic import validate_call
+from pydantic import Field, validate_call
 
 from postgres_mcp.index.dta_calc import DatabaseTuningAdvisor
 
-from .artifacts import ErrorResult
-from .artifacts import ExplainPlanArtifact
-from .database_health import DatabaseHealthTool
-from .database_health import HealthType
+from .artifacts import ErrorResult, ExplainPlanArtifact
+from .database_health import DatabaseHealthTool, HealthType
 from .explain import ExplainPlanTool
 from .index.index_opt_base import MAX_NUM_INDEX_TUNING_QUERIES
 from .index.llm_opt import LLMOptimizerTool
 from .index.presentation import TextPresentation
-from .sql import DbConnPool
-from .sql import SafeSqlDriver
-from .sql import SqlDriver
-from .sql import check_hypopg_installation_status
-from .sql import obfuscate_password
+from .sql import (
+    DbConnPool,
+    SafeSqlDriver,
+    SqlDriver,
+    check_hypopg_installation_status,
+    obfuscate_password,
+)
 from .top_queries import TopQueriesCalc
 
 # Initialize FastMCP with default settings
@@ -42,7 +37,7 @@ mcp = FastMCP("postgres-mcp")
 PG_STAT_STATEMENTS = "pg_stat_statements"
 HYPOPG_EXTENSION = "hypopg"
 
-ResponseType = List[types.TextContent | types.ImageContent | types.EmbeddedResource]
+ResponseType = list[types.TextContent | types.ImageContent | types.EmbeddedResource]
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +57,7 @@ is_stdio_transport = False
 shutdown_event = threading.Event()
 
 
-async def get_sql_driver() -> Union[SqlDriver, SafeSqlDriver]:
+async def get_sql_driver() -> SqlDriver | SafeSqlDriver:
     """Get the appropriate SQL driver based on the current access mode."""
     base_driver = SqlDriver(conn=db_connection)
 
@@ -101,7 +96,7 @@ async def list_schemas() -> ResponseType:
                 END as schema_type
             FROM information_schema.schemata
             ORDER BY schema_type, schema_name
-            """
+            """  # noqa: E501
         )
         schemas = [row.cells for row in rows] if rows else []
         return format_text_response(schemas)
@@ -113,15 +108,21 @@ async def list_schemas() -> ResponseType:
 @mcp.tool(description="List objects in a schema with comments")
 async def list_objects(
     schema_name: str = Field(description="Schema name"),
-    object_type: str = Field(description="Object type: 'table', 'view', 'sequence','function', 'stored procedure', or 'extension'", default="table"),
+    object_type: str = Field(
+        description="Object type: 'table', 'view', 'sequence','function', "
+        "'stored procedure', or 'extension'",
+        default="table",
+    ),
 ) -> ResponseType:
     """List objects of a given type in a schema, including object-level comments."""
     try:
         sql_driver = await get_sql_driver()
 
         if object_type in ("table", "view"):
-            # Use pg_catalog so we can fetch comments via obj_description(pg_class.oid, 'pg_class')
-            relkinds = ("'r'",) if object_type == "table" else ("'v'",)  # 'r' table, 'v' view
+            # Use pg_catalog so we can fetch comments via obj_description(pg_class.oid, 'pg_class')  # noqa: E501
+            relkinds = (
+                ("'r'",) if object_type == "table" else ("'v'",)
+            )  # 'r' table, 'v' view
             rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
                 f"""
@@ -135,7 +136,7 @@ async def list_objects(
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
                 WHERE n.nspname = {{}} AND c.relkind IN ({", ".join(relkinds)})
                 ORDER BY c.relname
-                """,
+                """,  # noqa: E501
                 [schema_name],
             )
             objects = (
@@ -146,7 +147,7 @@ async def list_objects(
                         "type": row.cells["object_type"],
                         "comment": row.cells["comment"],
                     }
-                    for row in (rows or [])
+                    for row in rows or []
                 ]
                 if rows
                 else []
@@ -166,14 +167,19 @@ async def list_objects(
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
                 WHERE n.nspname = {} AND c.relkind = 'S'
                 ORDER BY c.relname
-                """,
+                """,  # noqa: E501
                 [schema_name],
             )
             objects = (
-                [{"schema": row.cells["sequence_schema"],
-                    "name": row.cells["sequence_name"],
-                    "type": row.cells["object_type"],
-                    "comment": row.cells["comment"]} for row in rows]
+                [
+                    {
+                        "schema": row.cells["sequence_schema"],
+                        "name": row.cells["sequence_name"],
+                        "type": row.cells["object_type"],
+                        "comment": row.cells["comment"],
+                    }
+                    for row in rows
+                ]
                 if rows
                 else []
             )
@@ -190,18 +196,23 @@ async def list_objects(
                 FROM pg_catalog.pg_extension e
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = e.oid AND d.objsubid = 0
                 ORDER BY e.extname
-                """
+                """  # noqa: E501
             )
             objects = (
-                [{"name": row.cells["name"],
-                    "version": row.cells["version"],
-                    "relocatable": row.cells["relocatable"],
-                    "comment": row.cells["comment"]} for row in rows]
+                [
+                    {
+                        "name": row.cells["name"],
+                        "version": row.cells["version"],
+                        "relocatable": row.cells["relocatable"],
+                        "comment": row.cells["comment"],
+                    }
+                    for row in rows
+                ]
                 if rows
                 else []
             )
         elif object_type in ("function", "procedure"):
-            # prokind: 'f' = function, 'p' = procedure. Avoid obj_description(); use pg_description join.
+            # prokind: 'f' = function, 'p' = procedure. Avoid obj_description(); use pg_description join.  # noqa: E501
             prokind = "f" if object_type == "function" else "p"
             rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
@@ -216,15 +227,19 @@ async def list_objects(
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.objsubid = 0
                 WHERE n.nspname = {} AND p.prokind = {}
                 ORDER BY routine_name
-                """,
+                """,  # noqa: E501
                 [schema_name, prokind],
             )
-            objects =(
-                [{
-                    "schema": row.cells["routine_schema"],
-                    "name": row.cells["routine_name"],
-                    "type": row.cells["object_type"],
-                    "comment": row.cells["comment"]} for row in rows]
+            objects = (
+                [
+                    {
+                        "schema": row.cells["routine_schema"],
+                        "name": row.cells["routine_name"],
+                        "type": row.cells["object_type"],
+                        "comment": row.cells["comment"],
+                    }
+                    for row in rows
+                ]
                 if rows
                 else []
             )
@@ -241,25 +256,28 @@ async def list_objects(
 async def get_object_details(
     schema_name: str = Field(description="Schema name"),
     object_name: str = Field(description="Object name"),
-    object_type: str = Field(description="Object type: 'table', 'view', 'sequence', or 'extension'", default="table"),
+    object_type: str = Field(
+        description="Object type: 'table', 'view', 'sequence', or 'extension'",
+        default="table",
+    ),
 ) -> ResponseType:
     """Get detailed information about a database object."""
     try:
         sql_driver = await get_sql_driver()
 
         if object_type in ("table", "view"):
-            obj_comment_rows = await SafeSqlDriver.execute_param_query(
-                sql_driver,
-                """
-                SELECT d.description AS comment
-                FROM pg_catalog.pg_class c
-                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
-                WHERE n.nspname = {} AND c.relname = {}
-                """,
-                [schema_name, object_name],
-            )
-            object_comment = obj_comment_rows[0].cells["comment"] if obj_comment_rows else None
+            # obj_comment_rows = await SafeSqlDriver.execute_param_query(
+            #     sql_driver,
+            #     """
+            #     SELECT d.description AS comment
+            #     FROM pg_catalog.pg_class c
+            #     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            #     LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0  # noqa: E501
+            #     WHERE n.nspname = {} AND c.relname = {}
+            #     """,
+            #     [schema_name, object_name],
+            # )
+            # object_comment = obj_comment_rows[0].cells["comment"] if obj_comment_rows else None  # noqa: E501
 
             # Get columns
             col_rows = await SafeSqlDriver.execute_param_query(
@@ -302,7 +320,9 @@ async def get_object_details(
                 [schema_name, object_name],
             )
             # Map comments by column name and merge
-            col_comments = {r.cells["column_name"]: r.cells["comment"] for r in (col_cmt_rows or [])}
+            col_comments = {
+                r.cells["column_name"]: r.cells["comment"] for r in col_cmt_rows or []
+            }
             for col in columns:
                 col["comment"] = col_comments.get(col["column"])
 
@@ -332,7 +352,9 @@ async def get_object_details(
                     if col:
                         constraints[cname]["columns"].append(col)
 
-            constraints_list = [{"name": name, **data} for name, data in constraints.items()]
+            constraints_list = [
+                {"name": name, **data} for name, data in constraints.items()
+            ]
 
             # Get indexes
             idx_rows = await SafeSqlDriver.execute_param_query(
@@ -345,10 +367,21 @@ async def get_object_details(
                 [schema_name, object_name],
             )
 
-            indexes = [{"name": r.cells["indexname"], "definition": r.cells["indexdef"]} for r in idx_rows] if idx_rows else []
+            indexes = (
+                [
+                    {"name": r.cells["indexname"], "definition": r.cells["indexdef"]}
+                    for r in idx_rows
+                ]
+                if idx_rows
+                else []
+            )
 
             result = {
-                "basic": {"schema": schema_name, "name": object_name, "type": object_type},
+                "basic": {
+                    "schema": schema_name,
+                    "name": object_name,
+                    "type": object_type,
+                },
                 "columns": columns,
                 "constraints": constraints_list,
                 "indexes": indexes,
@@ -376,7 +409,7 @@ async def get_object_details(
                     LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
                     WHERE n.nspname = {} AND c.relname = {}
                       AND c.relkind = 'S'
-                    """,
+                    """,  # noqa: E501
                     [schema_name, object_name],
                 )
                 seq_comment = cmt_rows[0].cells["comment"] if cmt_rows else None
@@ -399,22 +432,23 @@ async def get_object_details(
                 FROM pg_catalog.pg_extension e
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = e.oid AND d.objsubid = 0
                 WHERE e.extname = {}
-                """,
+                """,  # noqa: E501
                 [object_name],
             )
 
             if rows and rows[0]:
                 row = rows[0]
                 result = {
-                    "name": row.cells["name"], 
-                    "version": row.cells["version"], 
+                    "name": row.cells["name"],
+                    "version": row.cells["version"],
                     "relocatable": row.cells["relocatable"],
-                    "comment": row.cells["comment"]
+                    "comment": row.cells["comment"],
                 }
             else:
                 result = {}
         elif object_type in ("function", "procedure"):
-            # Routine comment via pg_description; avoid catalog functions to keep validator happy
+            # Routine comment via pg_description; avoid catalog functions
+            # to keep validator happy
             prokind = "p" if object_type == "procedure" else "f"
             rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
@@ -429,11 +463,18 @@ async def get_object_details(
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.objsubid = 0
                 WHERE n.nspname = {} AND p.proname = {} AND p.prokind = {}
                 ORDER BY routine_name
-                """,
+                """,  # noqa: E501
                 [schema_name, object_name, prokind],
             )
-            result = [{"schema": r.cells["routine_schema"], "name": r.cells["routine_name"], "kind": r.cells["kind"],
-                       "comment": r.cells["comment"]} for r in (rows or [])]
+            result = [
+                {
+                    "schema": r.cells["routine_schema"],
+                    "name": r.cells["routine_name"],
+                    "kind": r.cells["kind"],
+                    "comment": r.cells["comment"],
+                }
+                for r in rows or []
+            ]
         else:
             return format_error_response(f"Unsupported object type: {object_type}")
 
@@ -443,19 +484,26 @@ async def get_object_details(
         return format_error_response(str(e))
 
 
-@mcp.tool(description="Explains the execution plan for a SQL query, showing how the database will execute it and provides detailed cost estimates.")
+@mcp.tool(
+    description="Explains the execution plan for a SQL query, showing how the database "
+    "will execute it and provides detailed cost estimates."
+)
 async def explain_query(
     sql: str = Field(description="SQL query to explain"),
     analyze: bool = Field(
-        description="When True, actually runs the query to show real execution statistics instead of estimates. "
+        description="When True, actually runs the query to show real execution "
+        "statistics instead of estimates. "
         "Takes longer but provides more accurate information.",
         default=False,
     ),
     hypothetical_indexes: list[dict[str, Any]] = Field(
-        description="""A list of hypothetical indexes to simulate. Each index must be a dictionary with these keys:
+        description="""A list of hypothetical indexes to simulate. Each index must be a"
+        " dictionary with these keys:
     - 'table': The table name to add the index to (e.g., 'users')
-    - 'columns': List of column names to include in the index (e.g., ['email'] or ['last_name', 'first_name'])
-    - 'using': Optional index method (default: 'btree', other options include 'hash', 'gist', etc.)
+    - 'columns': List of column names to include in the index (e.g., ['email'] or "
+    "['last_name', 'first_name'])
+    - 'using': Optional index method (default: 'btree', other options include 'hash', "
+    "'gist', etc.)
 
 Examples: [
     {"table": "users", "columns": ["email"], "using": "btree"},
@@ -481,7 +529,9 @@ If there is no hypothetical index, you can pass an empty list.""",
         # If hypothetical indexes are specified, check for HypoPG extension
         if hypothetical_indexes and len(hypothetical_indexes) > 0:
             if analyze:
-                return format_error_response("Cannot use analyze and hypothetical indexes together")
+                return format_error_response(
+                    "Cannot use analyze and hypothetical indexes together"
+                )
             try:
                 # Use the common utility function to check if hypopg is installed
                 (
@@ -494,7 +544,9 @@ If there is no hypothetical index, you can pass an empty list.""",
                     return format_text_response(hypopg_message)
 
                 # HypoPG is installed, proceed with explaining with hypothetical indexes
-                result = await explain_tool.explain_with_hypothetical_indexes(sql, hypothetical_indexes)
+                result = await explain_tool.explain_with_hypothetical_indexes(
+                    sql, hypothetical_indexes
+                )
             except Exception:
                 raise  # Re-raise the original exception
         elif analyze:
@@ -522,7 +574,8 @@ If there is no hypothetical index, you can pass an empty list.""",
         return format_error_response(str(e))
 
 
-# Query function declaration without the decorator - we'll add it dynamically based on access mode
+# Query function declaration without the decorator - we'll add it dynamically
+# based on access mode
 async def execute_sql(
     sql: str = Field(description="SQL to run", default="all"),
 ) -> ResponseType:
@@ -538,13 +591,20 @@ async def execute_sql(
         return format_error_response(str(e))
 
 
-@mcp.tool(description="Analyze frequently executed queries in the database and recommend optimal indexes")
+@mcp.tool(
+    description="Analyze frequently executed queries in the database and recommend "
+    "optimal indexes"
+)
 @validate_call
 async def analyze_workload_indexes(
     max_index_size_mb: int = Field(description="Max index size in MB", default=10000),
-    method: Literal["dta", "llm"] = Field(description="Method to use for analysis", default="dta"),
+    method: Literal["dta", "llm"] = Field(
+        description="Method to use for analysis", default="dta"
+    ),
 ) -> ResponseType:
-    """Analyze frequently executed queries in the database and recommend optimal indexes."""
+    """
+    Analyze frequently executed queries in the database and recommend optimal indexes.
+    """
     try:
         sql_driver = await get_sql_driver()
         if method == "dta":
@@ -559,18 +619,27 @@ async def analyze_workload_indexes(
         return format_error_response(str(e))
 
 
-@mcp.tool(description="Analyze a list of (up to 10) SQL queries and recommend optimal indexes")
+@mcp.tool(
+    description="Analyze a list of (up to 10) SQL queries and recommend optimal indexes"
+)
 @validate_call
 async def analyze_query_indexes(
     queries: list[str] = Field(description="List of Query strings to analyze"),
     max_index_size_mb: int = Field(description="Max index size in MB", default=10000),
-    method: Literal["dta", "llm"] = Field(description="Method to use for analysis", default="dta"),
+    method: Literal["dta", "llm"] = Field(
+        description="Method to use for analysis", default="dta"
+    ),
 ) -> ResponseType:
     """Analyze a list of SQL queries and recommend optimal indexes."""
     if len(queries) == 0:
-        return format_error_response("Please provide a non-empty list of queries to analyze.")
+        return format_error_response(
+            "Please provide a non-empty list of queries to analyze."
+        )
     if len(queries) > MAX_NUM_INDEX_TUNING_QUERIES:
-        return format_error_response(f"Please provide a list of up to {MAX_NUM_INDEX_TUNING_QUERIES} queries to analyze.")
+        return format_error_response(
+            f"Please provide a list of up to {MAX_NUM_INDEX_TUNING_QUERIES} queries "
+            "to analyze."
+        )
 
     try:
         sql_driver = await get_sql_driver()
@@ -579,7 +648,9 @@ async def analyze_query_indexes(
         else:
             index_tuning = LLMOptimizerTool(sql_driver)
         dta_tool = TextPresentation(sql_driver, index_tuning)
-        result = await dta_tool.analyze_queries(queries=queries, max_index_size_mb=max_index_size_mb)
+        result = await dta_tool.analyze_queries(
+            queries=queries, max_index_size_mb=max_index_size_mb
+        )
         return format_text_response(result)
     except Exception as e:
         logger.error(f"Error analyzing queries: {e}")
@@ -596,11 +667,13 @@ async def analyze_query_indexes(
     "- buffer - checks for buffer cache hit rates for indexes and tables\n"
     "- constraint - checks for invalid constraints\n"
     "- all - runs all checks\n"
-    "You can optionally specify a single health check or a comma-separated list of health checks. The default is 'all' checks."
+    "You can optionally specify a single health check or a comma-separated list of "
+    "health checks. The default is 'all' checks."
 )
 async def analyze_db_health(
     health_type: str = Field(
-        description=f"Optional. Valid values are: {', '.join(sorted([t.value for t in HealthType]))}.",
+        description="Optional. Valid values are: "
+        f"{', '.join(sorted([t.value for t in HealthType]))}.",
         default="all",
     ),
 ) -> ResponseType:
@@ -608,7 +681,8 @@ async def analyze_db_health(
 
     Args:
         health_type: Comma-separated list of health check types to perform.
-                    Valid values: index, connection, vacuum, sequence, replication, buffer, constraint, all
+                    Valid values: index, connection, vacuum, sequence, replication,
+                    buffer, constraint, all
     """
     health_tool = DatabaseHealthTool(await get_sql_driver())
     result = await health_tool.health(health_type=health_type)
@@ -617,15 +691,21 @@ async def analyze_db_health(
 
 @mcp.tool(
     name="get_top_queries",
-    description=f"Reports the slowest or most resource-intensive queries using data from the '{PG_STAT_STATEMENTS}' extension.",
+    description="Reports the slowest or most resource-intensive queries using data "
+    "from the '{PG_STAT_STATEMENTS}' extension.",
 )
 async def get_top_queries(
     sort_by: str = Field(
-        description="Ranking criteria: 'total_time' for total execution time or 'mean_time' for mean execution time per call, or 'resources' "
+        description="Ranking criteria: 'total_time' for total execution time or "
+        "'mean_time' for mean execution time per call, or 'resources' "
         "for resource-intensive queries",
         default="resources",
     ),
-    limit: int = Field(description="Number of queries to return when ranking based on mean_time or total_time", default=10),
+    limit: int = Field(
+        description="Number of queries to return when ranking based on mean_time or "
+        "total_time",
+        default=10,
+    ),
 ) -> ResponseType:
     try:
         sql_driver = await get_sql_driver()
@@ -636,9 +716,14 @@ async def get_top_queries(
             return format_text_response(result)
         elif sort_by == "mean_time" or sort_by == "total_time":
             # Map the sort_by values to what get_top_queries_by_time expects
-            result = await top_queries_tool.get_top_queries_by_time(limit=limit, sort_by="mean" if sort_by == "mean_time" else "total")
+            result = await top_queries_tool.get_top_queries_by_time(
+                limit=limit, sort_by="mean" if sort_by == "mean_time" else "total"
+            )
         else:
-            return format_error_response("Invalid sort criteria. Please use 'resources' or 'mean_time' or 'total_time'.")
+            return format_error_response(
+                "Invalid sort criteria. Please use 'resources' or 'mean_time' or "
+                "'total_time'."
+            )
         return format_text_response(result)
     except Exception as e:
         logger.error(f"Error getting slow queries: {e}")
@@ -672,7 +757,8 @@ async def main():
         type=str,
         choices=[mode.value for mode in AccessMode],
         default=AccessMode.UNRESTRICTED.value,
-        help="Set SQL access mode: unrestricted (unrestricted) or restricted (read-only with protections)",
+        help="Set SQL access mode: unrestricted (unrestricted) or restricted "
+        "(read-only with protections)",
     )
     parser.add_argument(
         "--transport",
@@ -725,19 +811,23 @@ async def main():
 
     if not database_url:
         raise ValueError(
-            "Error: No database URL provided. Please specify via 'DATABASE_URI' environment variable or command-line argument.",
+            "Error: No database URL provided. Please specify via 'DATABASE_URI' "
+            "environment variable or command-line argument.",
         )
 
     # Initialize database connection pool
     try:
         await db_connection.pool_connect(database_url)
-        logger.info("Successfully connected to database and initialized connection pool")
+        logger.info(
+            "Successfully connected to database and initialized connection pool"
+        )
     except Exception as e:
         logger.warning(
             f"Could not connect to database: {obfuscate_password(str(e))}",
         )
         logger.warning(
-            "The MCP server will start but database operations will fail until a valid connection is established.",
+            "The MCP server will start but database operations will fail until a valid "
+            "connection is established.",
         )
 
     # Set up proper shutdown handling
@@ -747,7 +837,10 @@ async def main():
     else:
         # On Windows, only SIGINT can be handled; SIGTERM is not supported.
         signal.signal(signal.SIGINT, signal_handler)
-        logger.warning("Limited signal handling on Windows: only SIGINT is handled, SIGTERM is not supported.")
+        logger.warning(
+            "Limited signal handling on Windows: only SIGINT is handled, SIGTERM "
+            "is not supported."
+        )
     global shutdown_in_progress, is_stdio_transport
     is_stdio_transport = args.transport == "stdio"
     try:

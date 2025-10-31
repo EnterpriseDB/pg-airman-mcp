@@ -20,7 +20,10 @@ class IndexDefinition:
 
     @property
     def definition(self) -> str:
-        return f"CREATE INDEX {self.name} ON {self.table} USING {self.using} ({', '.join(self.columns)})"
+        return (
+            f"CREATE INDEX {self.name} ON {self.table} USING {self.using} "
+            f"({', '.join(self.columns)})"
+        )
 
     @property
     def name(self) -> str:
@@ -32,7 +35,12 @@ class IndexDefinition:
             # Replace parentheses and other special characters with underscores
             # This ensures expressions like LOWER(column_name) work in
             # index names
-            cleaned_col = col.replace("(", "_").replace(")", "_").replace(" ", "_").replace(",", "_")
+            cleaned_col = (
+                col.replace("(", "_")
+                .replace(")", "_")
+                .replace(" ", "_")
+                .replace(",", "_")
+            )
             # Remove consecutive underscores
             while "__" in cleaned_col:
                 cleaned_col = cleaned_col.replace("__", "_")
@@ -49,4 +57,7 @@ class IndexDefinition:
         return self.definition
 
     def __repr__(self) -> str:
-        return f"IndexConfig(table='{self.table}', columns={self.columns}, using='{self.using}')"
+        return (
+            f"IndexConfig(table='{self.table}', columns={self.columns}, "
+            f"using='{self.using}')"
+        )

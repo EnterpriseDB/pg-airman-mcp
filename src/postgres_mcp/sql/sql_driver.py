@@ -3,16 +3,11 @@
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from typing import Any, LiteralString
+from urllib.parse import urlparse, urlunparse
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
-from typing_extensions import LiteralString
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +57,15 @@ def obfuscate_password(text: str | None) -> str | None:
 class DbConnPool:
     """Database connection manager using psycopg's connection pool."""
 
-    def __init__(self, connection_url: Optional[str] = None):
+    def __init__(self, connection_url: str | None = None):
         self.connection_url = connection_url
         self.pool: AsyncConnectionPool | None = None
         self._is_valid = False
         self._last_error = None
 
-    async def pool_connect(self, connection_url: Optional[str] = None) -> AsyncConnectionPool:
+    async def pool_connect(
+        self, connection_url: str | None = None
+    ) -> AsyncConnectionPool:
         """Initialize connection pool with retry logic."""
         # If we already have a valid pool, return it
         if self.pool and self._is_valid:
@@ -111,7 +108,9 @@ class DbConnPool:
             # Clean up failed pool
             await self.close()
 
-            raise ValueError(f"Connection attempt failed: {obfuscate_password(str(e))}") from e
+            raise ValueError(
+                f"Connection attempt failed: {obfuscate_password(str(e))}"
+            ) from e
 
     async def close(self) -> None:
         """Close the connection pool."""
@@ -131,19 +130,21 @@ class DbConnPool:
         return self._is_valid
 
     @property
-    def last_error(self) -> Optional[str]:
+    def last_error(self) -> str | None:
         """Get the last error message."""
         return self._last_error
 
 
 class SqlDriver:
-    """Adapter class that wraps a PostgreSQL connection with the interface expected by DTA."""
+    """
+    Adapter class that wraps a PostgreSQL connection with the interface expected by DTA.
+    """
 
     @dataclass
     class RowResult:
         """Simple class to match the Griptape RowResult interface."""
 
-        cells: Dict[str, Any]
+        cells: dict[str, Any]
 
     def __init__(
         self,
@@ -155,7 +156,8 @@ class SqlDriver:
 
         Args:
             conn: PostgreSQL connection object or pool
-            engine_url: Connection URL string as an alternative to providing a connection
+            engine_url: Connection URL string as an alternative
+            to providing a connection
         """
         if conn:
             self.conn = conn
@@ -177,14 +179,16 @@ class SqlDriver:
             self.is_pool = True
             return self.conn
         else:
-            raise ValueError("Connection not established. Either conn or engine_url must be provided")
+            raise ValueError(
+                "Connection not established. Either conn or engine_url must be provided"
+            )
 
     async def execute_query(
         self,
         query: LiteralString,
         params: list[Any] | None = None,
         force_readonly: bool = False,
-    ) -> Optional[List[RowResult]]:
+    ) -> list[RowResult] | None:
         """
         Execute a query and return results.
 
@@ -207,10 +211,14 @@ class SqlDriver:
                 # For pools, get a connection from the pool
                 pool = await self.conn.pool_connect()
                 async with pool.connection() as connection:
-                    return await self._execute_with_connection(connection, query, params, force_readonly=force_readonly)
+                    return await self._execute_with_connection(
+                        connection, query, params, force_readonly=force_readonly
+                    )
             else:
                 # Direct connection approach
-                return await self._execute_with_connection(self.conn, query, params, force_readonly=force_readonly)
+                return await self._execute_with_connection(
+                    self.conn, query, params, force_readonly=force_readonly
+                )
         except Exception as e:
             # Mark pool as invalid if there was a connection issue
             if self.conn and self.is_pool:
@@ -221,7 +229,9 @@ class SqlDriver:
 
             raise e
 
-    async def _execute_with_connection(self, connection, query, params, force_readonly) -> Optional[List[RowResult]]:
+    async def _execute_with_connection(
+        self, connection, query, params, force_readonly
+    ) -> list[RowResult] | None:
         """Execute query with the given connection."""
         transaction_started = False
         try:

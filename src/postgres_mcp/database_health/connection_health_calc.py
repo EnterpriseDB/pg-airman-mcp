@@ -34,7 +34,9 @@ class ConnectionHealthCalc:
 
         if total <= self.max_total_connections:
             return f"Total connections healthy: {total}"
-        return f"High number of connections: {total} (max: {self.max_total_connections})"
+        return (
+            f"High number of connections: {total} (max: {self.max_total_connections})"
+        )
 
     async def idle_connections_check(self) -> str:
         """Check if number of idle connections is within healthy limits."""
@@ -42,7 +44,10 @@ class ConnectionHealthCalc:
 
         if idle <= self.max_idle_connections:
             return f"Idle connections healthy: {idle}"
-        return f"High number of idle connections: {idle} (max: {self.max_idle_connections})"
+        return (
+            f"High number of idle connections: {idle} "
+            f"(max: {self.max_idle_connections})"
+        )
 
     async def connection_health_check(self) -> str:
         """Run all connection health checks and return combined results."""
@@ -58,19 +63,23 @@ class ConnectionHealthCalc:
 
     async def _get_total_connections(self) -> int:
         """Get the total number of database connections."""
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT COUNT(*) as count
             FROM pg_stat_activity
-        """)
+        """
+        )
         result_list = [dict(x.cells) for x in result] if result else []
         return result_list[0]["count"] if result_list else 0
 
     async def _get_idle_connections(self) -> int:
         """Get the number of connections that are idle in transaction."""
-        result = await self.sql_driver.execute_query("""
+        result = await self.sql_driver.execute_query(
+            """
             SELECT COUNT(*) as count
             FROM pg_stat_activity
             WHERE state = 'idle in transaction'
-        """)
+        """
+        )
         result_list = [dict(x.cells) for x in result] if result else []
         return result_list[0]["count"] if result_list else 0

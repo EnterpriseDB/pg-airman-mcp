@@ -2,8 +2,7 @@ from dataclasses import dataclass
 
 from psycopg.sql import Identifier
 
-from ..sql import SafeSqlDriver
-from ..sql import SqlDriver
+from ..sql import SafeSqlDriver, SqlDriver
 
 
 @dataclass
@@ -53,16 +52,19 @@ class SequenceHealthCalc:
         for metric in unhealthy:
             remaining = metric.max_value - metric.last_value
             result.append(
-                f"Sequence '{metric.schema}.{metric.sequence}' used for {metric.table}.{metric.column} "
+                f"Sequence '{metric.schema}.{metric.sequence}' used for "
+                f"{metric.table}.{metric.column} "
                 f"has used {metric.percent_used:.1f}% of available values "
-                f"({metric.last_value:,} of {metric.max_value:,}, {remaining:,} remaining)"
+                f"({metric.last_value:,} of {metric.max_value:,}, {remaining:,} "
+                "remaining)"
             )
         return "\n".join(result)
 
     async def _get_sequence_metrics(self) -> list[SequenceMetrics]:
         """Get metrics for sequences in the database."""
         # First get all sequences used as default values
-        sequences = await self.sql_driver.execute_query("""
+        sequences = await self.sql_driver.execute_query(
+            """
             SELECT
                 n.nspname AS table_schema,
                 c.relname AS table,
@@ -82,7 +84,8 @@ class SequenceHealthCalc:
                 AND a.attnum > 0
                 AND pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval%'
                 AND n.nspname NOT LIKE 'pg\\_temp\\_%'
-        """)
+        """
+        )
 
         if not sequences:
             return []
@@ -98,7 +101,9 @@ class SequenceHealthCalc:
                 continue
 
             # Determine max value based on column type
-            max_value = 2147483647 if seq["column_type"] == "integer" else 9223372036854775807
+            max_value = (
+                2147483647 if seq["column_type"] == "integer" else 9223372036854775807
+            )
 
             # Get sequence attributes
             attrs = await SafeSqlDriver.execute_param_query(

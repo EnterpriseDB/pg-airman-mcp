@@ -1,24 +1,24 @@
 import json
 import logging
 import time
-from abc import ABC
-from abc import abstractmethod
-from dataclasses import dataclass
-from dataclasses import field
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import Any
-from typing import Iterable
 
 from pglast import parse_sql
 from pglast.ast import SelectStmt
 
 from ..artifacts import calculate_improvement_multiple
 from ..explain import ExplainPlanTool
-from ..sql import IndexDefinition
-from ..sql import SafeSqlDriver
-from ..sql import SqlBindParams
-from ..sql import SqlDriver
-from ..sql import TableAliasVisitor
-from ..sql import check_hypopg_installation_status
+from ..sql import (
+    IndexDefinition,
+    SafeSqlDriver,
+    SqlBindParams,
+    SqlDriver,
+    TableAliasVisitor,
+    check_hypopg_installation_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,9 @@ MAX_NUM_INDEX_TUNING_QUERIES = 10
 
 def pp_list(lst: list[Any]) -> str:
     """Pretty print a list for debugging."""
-    return ("\n  - " if len(lst) > 0 else "") + "\n  - ".join([str(item) for item in lst])
+    return ("\n  - " if len(lst) > 0 else "") + "\n  - ".join(
+        [str(item) for item in lst]
+    )
 
 
 @dataclass
@@ -81,10 +83,16 @@ class IndexRecommendation:
         return self._definition.__eq__(other.index_config)
 
     def __str__(self) -> str:
-        return self._definition.__str__() + f" (estimated_size_bytes: {self.estimated_size_bytes})"
+        return (
+            self._definition.__str__()
+            + f" (estimated_size_bytes: {self.estimated_size_bytes})"
+        )
 
     def __repr__(self) -> str:
-        return self._definition.__repr__() + f" (estimated_size_bytes: {self.estimated_size_bytes})"
+        return (
+            self._definition.__repr__()
+            + f" (estimated_size_bytes: {self.estimated_size_bytes})"
+        )
 
 
 @dataclass
@@ -115,7 +123,9 @@ class IndexRecommendationAnalysis:
     @property
     def progressive_improvement_multiple(self) -> float:
         """Calculate the progressive percentage improvement from this recommendation."""
-        return calculate_improvement_multiple(self.progressive_base_cost, self.progressive_recommendation_cost)
+        return calculate_improvement_multiple(
+            self.progressive_base_cost, self.progressive_recommendation_cost
+        )
 
     @property
     def potential_problematic_reason(self) -> str | None:
@@ -128,7 +138,9 @@ class IndexRecommendationAnalysis:
     @property
     def individual_improvement_multiple(self) -> float:
         """Calculate the individual percentage improvement from this recommendation."""
-        return calculate_improvement_multiple(self.individual_base_cost, self.individual_recommendation_cost)
+        return calculate_improvement_multiple(
+            self.individual_base_cost, self.individual_recommendation_cost
+        )
 
     def to_index(self) -> IndexRecommendation:
         return self.index_recommendation
@@ -152,8 +164,18 @@ class IndexTuningResult:
     dta_traces: list[str] = field(default_factory=list)
 
 
-def candidate_str(indexes: Iterable[IndexDefinition] | Iterable[IndexRecommendation] | Iterable[IndexRecommendationAnalysis]) -> str:
-    return ", ".join(f"{idx.table}({','.join(idx.columns)})" for idx in indexes) if indexes else "(no indexes)"
+def candidate_str(
+    indexes: (
+        Iterable[IndexDefinition]
+        | Iterable[IndexRecommendation]
+        | Iterable[IndexRecommendationAnalysis]
+    ),
+) -> str:
+    return (
+        ", ".join(f"{idx.table}({','.join(idx.columns)})" for idx in indexes)
+        if indexes
+        else "(no indexes)"
+    )
 
 
 class IndexTuningBase(ABC):
@@ -190,7 +212,8 @@ class IndexTuningBase(ABC):
         """
         Analyze query workload and recommend indexes.
 
-        This method can analyze workload from three different sources (in order of priority):
+        This method can analyze workload from three different sources
+        (in order of priority):
         1. Explicit workload passed as a parameter
         2. Direct list of SQL queries passed as query_list
         3. SQL file with queries
@@ -200,8 +223,10 @@ class IndexTuningBase(ABC):
             workload: Optional explicit workload data
             sql_file: Optional path to a file containing SQL queries
             query_list: Optional list of SQL query strings to analyze
-            min_calls: Minimum number of calls for a query to be considered (for pg_stat_statements)
-            min_avg_time_ms: Minimum average execution time in ms (for pg_stat_statements)
+            min_calls: Minimum number of calls for a query to be considered
+            (for pg_stat_statements)
+            min_avg_time_ms: Minimum average execution time in ms
+            (for pg_stat_statements)
             limit: Maximum number of queries to analyze (for pg_stat_statements)
             max_index_size_mb: Maximum total size of recommended indexes in MB
 
@@ -236,7 +261,9 @@ class IndexTuningBase(ABC):
                 session.workload = workload
             # Then try direct query list if provided
             elif query_list:
-                logger.debug(f"Using provided query list with {len(query_list)} queries")
+                logger.debug(
+                    f"Using provided query list with {len(query_list)} queries"
+                )
                 session.workload_source = "query_list"
                 session.workload = []
                 for i, query in enumerate(query_list):
@@ -258,7 +285,9 @@ class IndexTuningBase(ABC):
             else:
                 logger.debug("Using query statistics from the database")
                 session.workload_source = "query_store"
-                session.workload = await self._get_query_stats(min_calls, min_avg_time_ms, limit)
+                session.workload = await self._get_query_stats(
+                    min_calls, min_avg_time_ms, limit
+                )
 
             if not session.workload:
                 logger.warning("No workload to analyze")
@@ -275,11 +304,18 @@ class IndexTuningBase(ABC):
                 # Gather queries as strings
                 workload_queries = [q for q, _, _ in query_weights]
 
-                self.dta_trace(f"Workload queries ({len(workload_queries)}): {pp_list(workload_queries)}")
+                self.dta_trace(
+                    f"Workload queries ({len(workload_queries)}): "
+                    f"{pp_list(workload_queries)}"
+                )
 
                 # Generate and evaluate index recommendations
-                recommendations: tuple[set[IndexRecommendation], float] = await self._generate_recommendations(query_weights)
-                session.recommendations = await self._format_recommendations(query_weights, recommendations)
+                recommendations: tuple[
+                    set[IndexRecommendation], float
+                ] = await self._generate_recommendations(query_weights)
+                session.recommendations = await self._format_recommendations(
+                    query_weights, recommendations
+                )
 
                 # Reset HypoPG only once at the end
                 await self.sql_driver.execute_query("SELECT hypopg_reset();")
@@ -291,19 +327,25 @@ class IndexTuningBase(ABC):
         session.dta_traces = self._dta_traces
         return session
 
-    async def _run_prechecks(self, session: IndexTuningResult) -> IndexTuningResult | None:
+    async def _run_prechecks(
+        self, session: IndexTuningResult
+    ) -> IndexTuningResult | None:
         """
-        Run pre-checks before analysis and return a session with error if any check fails.
+        Run pre-checks before analysis and return a session
+        with error if any check fails.
 
         Args:
             session: The current DTASession object
 
         Returns:
-            The DTASession with error information if any check fails, None if all checks pass
+            The DTASession with error information if any check fails,
+            None if all checks pass
         """
         # Pre-check 1: Check HypoPG with more granular feedback
         # Use our new utility function to check HypoPG status
-        is_hypopg_installed, hypopg_message = await check_hypopg_installation_status(self.sql_driver)
+        is_hypopg_installed, hypopg_message = await check_hypopg_installation_status(
+            self.sql_driver
+        )
 
         # If hypopg is not installed or not available, add error to session
         if not is_hypopg_installed:
@@ -311,12 +353,20 @@ class IndexTuningBase(ABC):
             return session
 
         # Pre-check 2: Check if ANALYZE has been run at least once
-        result = await self.sql_driver.execute_query("SELECT s.last_analyze FROM pg_stat_user_tables s ORDER BY s.last_analyze LIMIT 1;")
-        if not result or not any(row.cells.get("last_analyze") is not None for row in result):
+        result = await self.sql_driver.execute_query(
+            "SELECT s.last_analyze FROM pg_stat_user_tables s "
+            "ORDER BY s.last_analyze LIMIT 1;"
+        )
+        if not result or not any(
+            row.cells.get("last_analyze") is not None for row in result
+        ):
             error_message = (
-                "Statistics are not up-to-date. The database needs to be analyzed first. "
-                "Please run 'ANALYZE;' on your database before using the tuning advisor. "
-                "Without up-to-date statistics, the index recommendations may be inaccurate."
+                "Statistics are not up-to-date. The database needs "
+                "to be analyzed first. "
+                "Please run 'ANALYZE;' on your database before using "
+                "the tuning advisor. "
+                "Without up-to-date statistics, "
+                "the index recommendations may be inaccurate."
             )
             session.error = error_message
             logger.error(error_message)
@@ -325,7 +375,9 @@ class IndexTuningBase(ABC):
         # All checks passed
         return None
 
-    async def _validate_and_parse_workload(self, workload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _validate_and_parse_workload(
+        self, workload: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Validate the workload to ensure it is analyzable."""
         validated_workload = []
         for q in workload:
@@ -352,22 +404,30 @@ class IndexTuningBase(ABC):
             validated_workload.append(q)
         return validated_workload
 
-    def _covert_workload_to_query_weights(self, workload: list[dict[str, Any]]) -> list[tuple[str, SelectStmt, float]]:
+    def _covert_workload_to_query_weights(
+        self, workload: list[dict[str, Any]]
+    ) -> list[tuple[str, SelectStmt, float]]:
         """Convert workload to query weights based on query frequency."""
-        return [(q["query"], q["stmt"], self.convert_query_info_to_weight(q)) for q in workload]
+        return [
+            (q["query"], q["stmt"], self.convert_query_info_to_weight(q))
+            for q in workload
+        ]
 
     def convert_query_info_to_weight(self, query_info: dict[str, Any]) -> float:
         """Convert query info to weight based on query frequency."""
         return query_info.get("calls", 1.0) * query_info.get("avg_exec_time", 1.0)
 
-    async def get_explain_plan_with_indexes(self, query_text: str, indexes: frozenset[IndexDefinition]) -> dict[str, Any]:
+    async def get_explain_plan_with_indexes(
+        self, query_text: str, indexes: frozenset[IndexDefinition]
+    ) -> dict[str, Any]:
         """
         Get the explain plan for a query with a specific set of indexes.
         Results are memoized to avoid redundant explain operations.
 
         Args:
             query_text: The SQL query to explain
-            indexes: A frozenset of IndexConfig objects representing the indexes to enable
+            indexes: A frozenset of IndexConfig objects
+            representing the indexes to enable
 
         Returns:
             The explain plan as a dictionary
@@ -382,7 +442,9 @@ class IndexTuningBase(ABC):
 
         # Generate the plan using the static method
         explain_plan_tool = ExplainPlanTool(self.sql_driver)
-        plan = await explain_plan_tool.generate_explain_plan_with_hypothetical_indexes(query_text, indexes, False, self)
+        plan = await explain_plan_tool.generate_explain_plan_with_hypothetical_indexes(
+            query_text, indexes, False, self
+        )
 
         # Cache the result
         self._explain_plans_cache[cache_key] = plan
@@ -410,13 +472,17 @@ class IndexTuningBase(ABC):
         except Exception as e:
             raise ValueError(f"Error loading queries from file {file_path}") from e
 
-    async def _get_query_stats(self, min_calls: int, min_avg_time_ms: float, limit: int) -> list[dict[str, Any]]:
+    async def _get_query_stats(
+        self, min_calls: int, min_avg_time_ms: float, limit: int
+    ) -> list[dict[str, Any]]:
         """Get query statistics from pg_stat_statements"""
 
         # Reference to original implementation
         return await self._get_query_stats_direct(min_calls, min_avg_time_ms, limit)
 
-    async def _get_query_stats_direct(self, min_calls: int = 50, min_avg_time_ms: float = 5.0, limit: int = 100) -> list[dict[str, Any]]:
+    async def _get_query_stats_direct(
+        self, min_calls: int = 50, min_avg_time_ms: float = 5.0, limit: int = 100
+    ) -> list[dict[str, Any]]:
         """Direct implementation of query stats collection."""
         query = """
         SELECT queryid, query, calls, total_exec_time/calls as avg_exec_time
@@ -443,7 +509,10 @@ class IndexTuningBase(ABC):
         visitor(stmt)
 
         # Skip queries that only access system tables
-        if all(table.startswith("pg_") or table.startswith("aurora_") for table in visitor.tables):
+        if all(
+            table.startswith("pg_") or table.startswith("aurora_")
+            for table in visitor.tables
+        ):
             return False
         return True
 
@@ -466,10 +535,14 @@ class IndexTuningBase(ABC):
         """Evaluate total cost with selective enabling and caching."""
         # Use indexes as cache key
         if indexes in self.cost_cache:
-            self.dta_trace(f"  - Using cached cost for configuration: {candidate_str(indexes)}")
+            self.dta_trace(
+                f"  - Using cached cost for configuration: {candidate_str(indexes)}"
+            )
             return self.cost_cache[indexes]
 
-        self.dta_trace(f"  - Evaluating cost for configuration: {candidate_str(indexes)}")
+        self.dta_trace(
+            f"  - Evaluating cost for configuration: {candidate_str(indexes)}"
+        )
 
         total_cost = 0.0
         valid_queries = 0
@@ -479,14 +552,18 @@ class IndexTuningBase(ABC):
             for query_text, _stmt, weight in weighted_workload:
                 try:
                     # Get the explain plan using our memoized helper
-                    plan_data = await self.get_explain_plan_with_indexes(query_text, indexes)
+                    plan_data = await self.get_explain_plan_with_indexes(
+                        query_text, indexes
+                    )
 
                     # Extract cost from the plan data
                     cost = self.extract_cost_from_json_plan(plan_data)
                     total_cost += cost * weight
                     valid_queries += 1
                 except Exception as e:
-                    raise ValueError(f"Error executing explain for query: {query_text}") from e
+                    raise ValueError(
+                        f"Error executing explain for query: {query_text}"
+                    ) from e
 
             if valid_queries == 0:
                 self.dta_trace("    + no valid queries found for cost evaluation")
@@ -494,7 +571,9 @@ class IndexTuningBase(ABC):
 
             avg_cost = total_cost / valid_queries
             self.cost_cache[indexes] = avg_cost
-            self.dta_trace(f"    + config cost: {avg_cost:.2f} (from {valid_queries} queries)")
+            self.dta_trace(
+                f"    + config cost: {avg_cost:.2f} (from {valid_queries} queries)"
+            )
             return avg_cost
 
         except Exception as e:
@@ -523,7 +602,9 @@ class IndexTuningBase(ABC):
                 [table, columns],
             )
             if result and result[0].cells:
-                size_estimate = self._estimate_index_size_internal(dict(result[0].cells))
+                size_estimate = self._estimate_index_size_internal(
+                    dict(result[0].cells)
+                )
 
                 # Cache the result
                 self._size_estimate_cache[cache_key] = size_estimate
@@ -541,14 +622,18 @@ class IndexTuningBase(ABC):
         return size_estimate
 
     async def _format_recommendations(
-        self, query_weights: list[tuple[str, SelectStmt, float]], best_config: tuple[set[IndexRecommendation], float]
+        self,
+        query_weights: list[tuple[str, SelectStmt, float]],
+        best_config: tuple[set[IndexRecommendation], float],
     ) -> list[IndexRecommendationAnalysis]:
         """Format recommendations into a list of IndexRecommendation objects."""
         # build final recommendations from best_config
         recommendations: list[IndexRecommendationAnalysis] = []
         total_size = 0
         budget_bytes = self.budget_mb * 1024 * 1024
-        individual_base_cost = await self._evaluate_configuration_cost(query_weights, frozenset()) or 1.0
+        individual_base_cost = (
+            await self._evaluate_configuration_cost(query_weights, frozenset()) or 1.0
+        )
         progressive_base_cost = individual_base_cost
         indexes_so_far: list[IndexRecommendation] = []
         for index_config in best_config[0]:
@@ -556,14 +641,18 @@ class IndexTuningBase(ABC):
             # Calculate the cost with only this index
             progressive_cost = await self._evaluate_configuration_cost(
                 query_weights,
-                frozenset(idx.index_definition for idx in indexes_so_far),  # Indexes so far
+                frozenset(
+                    idx.index_definition for idx in indexes_so_far
+                ),  # Indexes so far
             )
             individual_cost = await self._evaluate_configuration_cost(
                 query_weights,
                 frozenset([index_config.index_definition]),  # Only this index
             )
 
-            size = await self._estimate_index_size(index_config.table, list(index_config.columns))
+            size = await self._estimate_index_size(
+                index_config.table, list(index_config.columns)
+            )
             if budget_bytes < 0 or total_size + size <= budget_bytes:
                 self.dta_trace(f"Adding index: {candidate_str([index_config])}")
                 rec = IndexRecommendationAnalysis(
@@ -571,7 +660,9 @@ class IndexTuningBase(ABC):
                         table=index_config.table,
                         columns=index_config.columns,
                         using=index_config.using,
-                        potential_problematic_reason=index_config.potential_problematic_reason,
+                        potential_problematic_reason=(
+                            index_config.potential_problematic_reason
+                        ),
                         estimated_size_bytes=size,
                     ),
                     progressive_base_cost=progressive_base_cost,
@@ -585,7 +676,10 @@ class IndexTuningBase(ABC):
                 recommendations.append(rec)
                 total_size += size
             else:
-                self.dta_trace(f"Skipping index: {candidate_str([index_config])} because it exceeds budget")
+                self.dta_trace(
+                    f"Skipping index: {candidate_str([index_config])} "
+                    "because it exceeds budget"
+                )
 
         return recommendations
 
@@ -631,7 +725,9 @@ class IndexTuningBase(ABC):
         try:
             # Use the proper way to calculate table size with quoted identifiers
             query = "SELECT pg_total_relation_size(quote_ident({})) as rel_size"
-            result = await SafeSqlDriver.execute_param_query(self.sql_driver, query, [table])
+            result = await SafeSqlDriver.execute_param_query(
+                self.sql_driver, query, [table]
+            )
 
             if result and len(result) > 0 and len(result[0].cells) > 0:
                 size = int(result[0].cells["rel_size"])
@@ -654,7 +750,9 @@ class IndexTuningBase(ABC):
         """Estimate the size of a table if we can't get it from the database."""
         try:
             # Try a simple query to get row count and then estimate size
-            result = await SafeSqlDriver.execute_param_query(self.sql_driver, "SELECT count(*) as row_count FROM {}", [table])
+            result = await SafeSqlDriver.execute_param_query(
+                self.sql_driver, "SELECT count(*) as row_count FROM {}", [table]
+            )
             if result and len(result) > 0 and len(result[0].cells) > 0:
                 row_count = int(result[0].cells["row_count"])
                 # Rough estimate: assume 1KB per row
@@ -666,6 +764,8 @@ class IndexTuningBase(ABC):
         return 10 * 1024 * 1024  # 10MB default
 
     @abstractmethod
-    async def _generate_recommendations(self, query_weights: list[tuple[str, SelectStmt, float]]) -> tuple[set[IndexRecommendation], float]:
+    async def _generate_recommendations(
+        self, query_weights: list[tuple[str, SelectStmt, float]]
+    ) -> tuple[set[IndexRecommendation], float]:
         """Generate index tuning queries."""
         pass
