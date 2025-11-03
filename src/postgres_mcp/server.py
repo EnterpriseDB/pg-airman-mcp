@@ -266,19 +266,6 @@ async def get_object_details(
         sql_driver = await get_sql_driver()
 
         if object_type in ("table", "view"):
-            # obj_comment_rows = await SafeSqlDriver.execute_param_query(
-            #     sql_driver,
-            #     """
-            #     SELECT d.description AS comment
-            #     FROM pg_catalog.pg_class c
-            #     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-            #     LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0  # noqa: E501
-            #     WHERE n.nspname = {} AND c.relname = {}
-            #     """,
-            #     [schema_name, object_name],
-            # )
-            # object_comment = obj_comment_rows[0].cells["comment"] if obj_comment_rows else None  # noqa: E501
-
             # Get columns
             col_rows = await SafeSqlDriver.execute_param_query(
                 sql_driver,
