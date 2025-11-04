@@ -1,4 +1,4 @@
-name: Postgres MCP CI
+name: Postgres MCP Tests
 
 on:
   push:
@@ -10,6 +10,7 @@ on:
     types: [opened, synchronize, reopened]
     paths-ignore:
       - "**/README.md"
+  workflow_dispatch:
 
 jobs:
   postgres-mcp-ci:
@@ -32,19 +33,17 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        with:
-          version: "0.6.9"
+        # with:
+        #   version: "0.6.9"
 
       - name: Build
         run: uv sync
 
-      - name: Run Lint
-        run: |
-          uv run ruff format --check .
-          uv run ruff check .
-
-      - name: Run Check
-        run: uv run pyright
-
       - name: Run Tests
-        run: uv run pytest -v --log-cli-level=INFO
+        run: uv run pytest -v --log-cli-level=INFO --cov-report=xml:coverage.xml --junitxml=pytest.xml --cov src/postgres_mcp/ --cov-report term tests/
+
+      - name: Coverage comment
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          pytest-xml-coverage-path: ./coverage.xml
+          junitxml-path: ./pytest.xml
