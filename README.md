@@ -207,6 +207,31 @@ Postgres MCP Pro supports multiple *access modes* to give you control over the o
 
 To use restricted mode, replace `--access-mode=unrestricted` with `--access-mode=restricted` in the configuration examples above.
 
+### Safe Metadata Writes (Allowlist)
+
+In restricted mode the server enforces read-only execution for regular queries via `SafeSqlDriver`. Some lightweight metadata operations can be explicitly allowed through a controlled **safe metadata allowlist**. Currently only `COMMENT ON` statements are supported via the `add_comment_to_object` tool.
+
+The behavior is controlled by the environment variable:
+
+```bash
+ALLOW_COMMENT_IN_RESTRICTED=true   # default: true
+```
+
+Set this variable to `false` to block comment writes when running with `--access-mode=restricted`.
+
+Rationale:
+- Keeps the semantics of restricted mode mostly read-only while permitting non-destructive documentation changes.
+- Prevents ad-hoc unwrapping of the safe driver throughout the codebase—metadata writes route through a single helper (`execute_comment_on`).
+- Provides a clear extension point for future safe metadata operations if needed.
+
+When a comment is written in restricted mode the server logs:
+
+```
+COMMENT ON <KIND> <qualified_identifier> length=<N> in restricted mode
+```
+
+If disabled you will receive an error: `COMMENT ON is not permitted in restricted mode`.
+
 
 #### Other MCP Clients
 
@@ -329,6 +354,7 @@ Postgres MCP Pro Tools:
 | `analyze_workload_indexes` | Analyzes the database workload to identify resource-intensive queries, then recommends optimal indexes for them. |
 | `analyze_query_indexes` | Analyzes a list of specific SQL queries (up to 10) and recommends optimal indexes for them. |
 | `analyze_db_health` | Performs comprehensive health checks including: buffer cache hit rates, connection health, constraint validation, index health (duplicate/unused/invalid), sequence limits, and vacuum health. |
+| `add_comment_to_object` | Adds a comment to a table, view, or column (allowed in restricted mode only if `ALLOW_COMMENT_IN_RESTRICTED=true`). |
 
 
 ## Related Projects

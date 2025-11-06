@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from typing import Any, ClassVar, LiteralString, Optional
 
@@ -24,6 +25,7 @@ from pglast.ast import (
     CoalesceExpr,
     CollateClause,
     ColumnRef,
+    CommentStmt,
     CommonTableExpr,
     CreateExtensionStmt,
     DeallocateStmt,
@@ -113,6 +115,7 @@ class SafeSqlDriver(SqlDriver):
         DeclareCursorStmt,  # DECLARE CURSOR (for cursor operations)
         ClosePortalStmt,  # CLOSE (for closing cursors)
         FetchStmt,  # FETCH (for retrieving cursor results)
+        CommentStmt,  # COMMENT ON statements (metadata only)
         # CheckPointStmt,  # CHECKPOINT (read-only administrative command)
         # ListenStmt,  # LISTEN (notification system)
         # UnlistenStmt,  # UNLISTEN (notification system)
@@ -1050,3 +1053,96 @@ class SafeSqlDriver(SqlDriver):
             return await sql_driver.execute_query(query_params)  # type: ignore
         else:
             return await sql_driver.execute_query(query)
+
+    # Public validation method (wraps internal protected method)
+    def validate_sql(self, query: str) -> None:
+        self._validate(query)
+
+
+# --- Metadata helpers ----------------------------------------------------
+def _quote_ident(name: str) -> str:
+    """Safely quote a PostgreSQL identifier.
+
+    Doubles internal double quotes and wraps the identifier in double quotes.
+    Assumes the input is a simple identifier part (schema/table/column).
+    """
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _quote_comment(text: str | None) -> str:
+    """Return a safely quoted SQL literal for a COMMENT string.
+
+    Postgres COMMENT ON requires either a single-quoted string literal or NULL.
+    Parameter placeholders (e.g. %s / $1) are not accepted by Postgres grammar
+    here, so we must inline a literal while preventing injection.
+
+    We escape single quotes by doubling them per SQL standard.
+    If text is None, we return NULL (to clear the comment).
+    """
+    if text is None:
+        return "NULL"
+    return "'" + text.replace("'", "''") + "'"
+
+
+# Environment-controlled flag (default true) for allowing comments in restricted mode
+ALLOW_COMMENT_IN_RESTRICTED = (
+    os.getenv("ALLOW_COMMENT_IN_RESTRICTED", "true").lower() == "true"
+)
+
+# Metadata allowlist (extendable for future operations)
+SAFE_METADATA_ALLOWLIST: dict[str, bool] = {
+    "COMMENT": True,  # Enable COMMENT ON statements through helper
+}
+
+
+async def execute_comment_on(
+    sql_driver: SqlDriver | SafeSqlDriver,
+    kind: str,
+    identifiers: list[str],
+    comment: str,
+    *,
+    max_length: int = 5000,
+) -> None:
+    """Execute a COMMENT ON statement safely.
+
+    Args:
+        sql_driver: SqlDriver or SafeSqlDriver instance.
+        kind: One of TABLE, VIEW, COLUMN.
+        identifiers: Ordered identifier parts (schema, table[, column]).
+        comment: Comment text.
+        max_length: Optional cap on comment length.
+    """
+    normalized_kind = kind.upper()
+    if normalized_kind not in {"TABLE", "VIEW", "COLUMN"}:
+        raise ValueError(f"Unsupported COMMENT object kind: {kind}")
+    if len(identifiers) == 0:
+        raise ValueError("At least one identifier is required")
+    if any(part is None or part == "" for part in identifiers):
+        raise ValueError("Identifier parts must be non-empty strings")
+    if len(comment) > max_length:
+        raise ValueError(f"Comment exceeds maximum length of {max_length} characters")
+
+    qualified = ".".join(_quote_ident(p) for p in identifiers)
+    comment_literal = _quote_comment(comment)
+    query = f"COMMENT ON {normalized_kind} {qualified} IS {comment_literal}"
+
+    # If restricted mode, optionally disallow metadata writes and validate
+    if isinstance(sql_driver, SafeSqlDriver):
+        if not (
+            ALLOW_COMMENT_IN_RESTRICTED
+            and SAFE_METADATA_ALLOWLIST.get("COMMENT", False)
+        ):
+            raise ValueError("COMMENT ON is not permitted in restricted mode")
+        # Build sanitized validation query with empty literal to validate structure
+        sanitized_query = f"COMMENT ON {normalized_kind} {qualified} IS ''"
+        sql_driver.validate_sql(sanitized_query)
+        underlying = sql_driver.sql_driver
+        logger.info(
+            f"""COMMENT ON {normalized_kind} {qualified} length={len(comment)}
+            in restricted mode"""
+        )
+    else:
+        underlying = sql_driver
+
+    # No parameters: comment already safely inlined.
+    await underlying.execute_query(query, None, force_readonly=False)  # type: ignore[arg-type]

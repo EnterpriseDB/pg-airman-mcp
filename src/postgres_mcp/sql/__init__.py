@@ -9,7 +9,7 @@ from .extension_utils import (
     reset_postgres_version_cache,
 )
 from .index import IndexDefinition
-from .safe_sql import SafeSqlDriver
+from .safe_sql import SafeSqlDriver, execute_comment_on
 from .sql_driver import DbConnPool, SqlDriver, obfuscate_password
 
 __all__ = [
@@ -23,6 +23,7 @@ __all__ = [
     "check_extension",
     "check_hypopg_installation_status",
     "check_postgres_version_requirement",
+    "execute_comment_on",
     "get_postgres_version",
     "obfuscate_password",
     "reset_postgres_version_cache",

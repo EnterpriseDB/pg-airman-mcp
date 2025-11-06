@@ -26,6 +26,7 @@ from .sql import (
     SafeSqlDriver,
     SqlDriver,
     check_hypopg_installation_status,
+    execute_comment_on,
     obfuscate_password,
 )
 from .top_queries import TopQueriesCalc
@@ -714,6 +715,52 @@ async def get_top_queries(
         return format_text_response(result)
     except Exception as e:
         logger.error(f"Error getting slow queries: {e}")
+        return format_error_response(str(e))
+
+
+@mcp.tool(
+    name="add_comment_to_object", description="Adds a comment to a database object."
+)
+async def add_comment_to_object(
+    schema_name: str = Field(description="Schema name"),
+    object_type: str = Field(
+        description="Object type: 'table', 'view', or 'column'",
+        default="table",
+    ),
+    object_name: str = Field(description="Object name"),
+    comment: str = Field(description="Comment text"),
+    column_name: str | None = Field(
+        description="Column name (if object_type is 'column')", default=None
+    ),
+) -> ResponseType:
+    """Add a comment to a database object."""
+    try:
+        allowed_object_types = {"table": "TABLE", "view": "VIEW", "column": "COLUMN"}
+        normalized_type = object_type.lower()
+        kind = allowed_object_types.get(normalized_type)
+        if not kind:
+            return format_error_response(
+                "Unsupported object type. Use 'table', 'view', or 'column'."
+            )
+
+        if normalized_type in ("table", "view"):
+            if not schema_name:
+                return format_error_response("Schema name is required for table/view.")
+            parts = [schema_name, object_name]
+        else:  # column
+            if not schema_name or not object_name or not column_name:
+                return format_error_response(
+                    "Schema, object, and column names are required for column comments."
+                )
+            parts = [schema_name, object_name, column_name]
+
+        sql_driver = await get_sql_driver()
+        await execute_comment_on(sql_driver, kind, parts, comment)
+        return format_text_response(
+            f"Successfully added comment to {normalized_type} '{object_name}'."
+        )
+    except Exception as e:
+        logger.error(f"Error executing comment statement: {e}")
         return format_error_response(str(e))
 
 
