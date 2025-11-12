@@ -50,7 +50,7 @@ class IndexDefinition:
 
         column_part = "_".join(cleaned_columns)
         suffix = "" if self.using == "btree" else f"_{self.using}"
-        base = f"crystaldba_idx_{self.table}_{column_part}_{len(self.columns)}"
+        base = f"enterprisedb_idx_{self.table}_{column_part}_{len(self.columns)}"
         return f"{base}{suffix}"
 
     def __str__(self) -> str:

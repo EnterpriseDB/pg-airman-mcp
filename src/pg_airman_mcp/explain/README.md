@@ -10,11 +10,12 @@ Provides methods for generating different types of EXPLAIN plans.
 
 ## Usage
 
-The explain tool is integrated into the PostgreSQL MCP server and can be used through the MCP API via the function:
+The explain tool is integrated into the Pg Airman MCP server and can be used through the MCP API via the function:
 
 - `explain_query`
 
 This function accepts parameters to control the behavior:
+
 - `sql` - The SQL query to explain (required)
 - `analyze` - When true, executes the query to get real statistics (default: false)
 - `hypothetical_indexes` - Optional list of indexes to simulate without creating them

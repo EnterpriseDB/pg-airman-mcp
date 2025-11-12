@@ -13,7 +13,7 @@ import mcp.types as types
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field, validate_call
 
-from postgres_mcp.index.dta_calc import DatabaseTuningAdvisor
+from pg_airman_mcp.index.dta_calc import DatabaseTuningAdvisor
 
 from .artifacts import ErrorResult, ExplainPlanArtifact
 from .database_health import DatabaseHealthTool, HealthType
@@ -32,7 +32,7 @@ from .sql import (
 from .top_queries import TopQueriesCalc
 
 # Initialize FastMCP with default settings
-mcp = FastMCP("postgres-mcp")
+mcp = FastMCP("pg-airman-mcp")
 
 # Constants
 PG_STAT_STATEMENTS = "pg_stat_statements"
@@ -801,7 +801,7 @@ def signal_handler(signal, _) -> None:
 
 async def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="PostgreSQL MCP Server")
+    parser = argparse.ArgumentParser(description="Pg Airman MCP Server")
     parser.add_argument("database_url", help="Database connection URL", nargs="?")
     parser.add_argument(
         "--access-mode",
@@ -855,7 +855,7 @@ async def main():
     else:
         mcp.add_tool(execute_sql, description="Execute a read-only SQL query")
 
-    logger.info(f"Starting PostgreSQL MCP Server in {current_access_mode.upper()} mode")
+    logger.info(f"Starting Pg Airman MCP Server in {current_access_mode.upper()} mode")
 
     # Get database URL from environment variable or command line
     database_url = os.environ.get("DATABASE_URI", args.database_url)
