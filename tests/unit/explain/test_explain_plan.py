@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
-from postgres_mcp.artifacts import ErrorResult, ExplainPlanArtifact
-from postgres_mcp.explain import ExplainPlanTool
+from pg_airman_mcp.artifacts import ErrorResult, ExplainPlanArtifact
+from pg_airman_mcp.explain import ExplainPlanTool
 
 
 class MockCell:
@@ -196,7 +196,7 @@ async def test_explain_with_bind_variables_pg15(mock_sql_driver, monkeypatch):
 
     # The correct import path for monkeypatching
     monkeypatch.setattr(
-        "postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
+        "pg_airman_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
     )
 
     # Set up the mock to return different responses for different queries
@@ -268,7 +268,7 @@ async def test_explain_analyze_with_bind_variables(mock_sql_driver, monkeypatch)
 
     # The correct import path for monkeypatching
     monkeypatch.setattr(
-        "postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
+        "pg_airman_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
     )
 
     # Set up the mock to return mock plan for the modified query
@@ -415,7 +415,7 @@ async def test_explain_with_like_and_bind_variables_pg16(mock_sql_driver, monkey
 
     # The correct import path for monkeypatching
     monkeypatch.setattr(
-        "postgres_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
+        "pg_airman_mcp.explain.explain_plan.SqlBindParams", MockSqlBindParams
     )
 
     # Set up the mock to return different responses for different queries

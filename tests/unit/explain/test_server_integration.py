@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from postgres_mcp.server import explain_query
+from pg_airman_mcp.server import explain_query
 
 
 @pytest_asyncio.fixture
@@ -39,12 +39,12 @@ async def test_explain_query_integration():
 
     # Patch the format_text_response function
     with patch(
-        "postgres_mcp.server.format_text_response", return_value=[mock_text_result]
+        "pg_airman_mcp.server.format_text_response", return_value=[mock_text_result]
     ):
         # Patch the get_sql_driver
-        with patch("postgres_mcp.server.get_sql_driver"):
+        with patch("pg_airman_mcp.server.get_sql_driver"):
             # Patch the ExplainPlanTool
-            with patch("postgres_mcp.server.ExplainPlanTool"):
+            with patch("pg_airman_mcp.server.ExplainPlanTool"):
                 result = await explain_query(
                     "SELECT * FROM users", hypothetical_indexes=None
                 )
@@ -67,12 +67,12 @@ async def test_explain_query_with_analyze_integration():
 
     # Patch the format_text_response function
     with patch(
-        "postgres_mcp.server.format_text_response", return_value=[mock_text_result]
+        "pg_airman_mcp.server.format_text_response", return_value=[mock_text_result]
     ):
         # Patch the get_sql_driver
-        with patch("postgres_mcp.server.get_sql_driver"):
+        with patch("pg_airman_mcp.server.get_sql_driver"):
             # Patch the ExplainPlanTool
-            with patch("postgres_mcp.server.ExplainPlanTool"):
+            with patch("pg_airman_mcp.server.ExplainPlanTool"):
                 result = await explain_query(
                     "SELECT * FROM users", analyze=True, hypothetical_indexes=None
                 )
@@ -97,7 +97,7 @@ async def test_explain_query_with_hypothetical_indexes_integration():
 
     # Patch the format_text_response function
     with patch(
-        "postgres_mcp.server.format_text_response", return_value=[mock_text_result]
+        "pg_airman_mcp.server.format_text_response", return_value=[mock_text_result]
     ):
         # Create mock SafeSqlDriver that returns extension exists
         mock_safe_driver = MagicMock()
@@ -105,9 +105,11 @@ async def test_explain_query_with_hypothetical_indexes_integration():
         mock_safe_driver.execute_query = mock_execute_query
 
         # Patch the get_sql_driver
-        with patch("postgres_mcp.server.get_sql_driver", return_value=mock_safe_driver):
+        with patch(
+            "pg_airman_mcp.server.get_sql_driver", return_value=mock_safe_driver
+        ):
             # Patch the ExplainPlanTool
-            with patch("postgres_mcp.server.ExplainPlanTool"):
+            with patch("pg_airman_mcp.server.ExplainPlanTool"):
                 result = await explain_query(
                     test_sql, hypothetical_indexes=test_indexes
                 )
@@ -137,12 +139,14 @@ async def test_explain_query_missing_hypopg_integration():
 
     # Patch the format_text_response function
     with patch(
-        "postgres_mcp.server.format_text_response", return_value=[mock_text_result]
+        "pg_airman_mcp.server.format_text_response", return_value=[mock_text_result]
     ):
         # Patch the get_sql_driver
-        with patch("postgres_mcp.server.get_sql_driver", return_value=mock_safe_driver):
+        with patch(
+            "pg_airman_mcp.server.get_sql_driver", return_value=mock_safe_driver
+        ):
             # Patch the ExplainPlanTool
-            with patch("postgres_mcp.server.ExplainPlanTool"):
+            with patch("pg_airman_mcp.server.ExplainPlanTool"):
                 result = await explain_query(
                     test_sql, hypothetical_indexes=test_indexes
                 )
@@ -163,11 +167,11 @@ async def test_explain_query_error_handling_integration():
 
     # Patch the format_error_response function
     with patch(
-        "postgres_mcp.server.format_error_response", return_value=[mock_text_result]
+        "pg_airman_mcp.server.format_error_response", return_value=[mock_text_result]
     ):
         # Patch the get_sql_driver to throw an exception
         with patch(
-            "postgres_mcp.server.get_sql_driver",
+            "pg_airman_mcp.server.get_sql_driver",
             side_effect=Exception(error_message),
         ):
             result = await explain_query("INVALID SQL")

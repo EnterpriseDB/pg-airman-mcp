@@ -1,6 +1,6 @@
 import pytest
 
-from postgres_mcp.sql import SqlDriver, execute_comment_on
+from pg_airman_mcp.sql import SqlDriver, execute_comment_on
 
 
 class FakeSqlDriver(SqlDriver):

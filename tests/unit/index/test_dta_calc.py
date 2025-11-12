@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 from pglast import parse_sql
 
-from postgres_mcp.artifacts import ExplainPlanArtifact
-from postgres_mcp.index.dta_calc import (
+from pg_airman_mcp.artifacts import ExplainPlanArtifact
+from pg_airman_mcp.index.dta_calc import (
     ColumnCollector,
     ConditionColumnCollector,
     DatabaseTuningAdvisor,
@@ -80,7 +80,7 @@ async def test_index_initialization():
     assert idx.table == "users"
     assert idx.columns == ("name", "email")
     assert (
-        idx.definition == "CREATE INDEX crystaldba_idx_users_name_email_2 ON users "
+        idx.definition == "CREATE INDEX enterprisedb_idx_users_name_email_2 ON users "
         "USING btree (name, email)"
     )
 
@@ -143,7 +143,11 @@ async def test_generate_candidates(async_sql_driver, create_dta):
         # create index users.name
         [MockCell({"indexrelid": 123})],
         # pg_stat_statements
-        [MockCell({"index_name": "crystaldba_idx_users_name_1", "index_size": 81920})],
+        [
+            MockCell(
+                {"index_name": "enterprisedb_idx_users_name_1", "index_size": 81920}
+            )
+        ],
         # hypopg_reset
         [],
     ]
@@ -277,7 +281,7 @@ async def test_index_exists(create_dta):
         {
             "candidate": IndexRecommendation("users", ("name",)),
             "existing_defs": {
-                "CREATE INDEX crystaldba_idx_users_name_1 ON users USING btree (name)"
+                "CREATE INDEX enterprisedb_idx_users_name_1 ON users USING btree (name)"
             },
             "expected": True,
             "description": "Exact match",
@@ -589,10 +593,12 @@ async def test_basic_workload_analysis(async_sql_driver):
         [MockCell({"indexrelid": 1554}), MockCell({"indexrelid": 1555})],
         # hypopg_list_indexes
         [
-            MockCell({"index_name": "crystaldba_idx_users_name_1", "index_size": 8000}),
+            MockCell(
+                {"index_name": "enterprisedb_idx_users_name_1", "index_size": 8000}
+            ),
             MockCell(
                 {
-                    "index_name": "crystaldba_idx_orders_user_id_1",
+                    "index_name": "enterprisedb_idx_orders_user_id_1",
                     "index_size": 4000,
                 }
             ),

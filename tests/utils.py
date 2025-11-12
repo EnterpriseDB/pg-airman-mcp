@@ -28,7 +28,7 @@ def create_postgres_container(version: str) -> Generator[tuple[str, str], None, 
     custom_image_name = f"postgres-hypopg:{pg_version}"
 
     container_name = (
-        f"postgres-crystal-test-{version.replace(':', '_')}-{os.urandom(4).hex()}"
+        f"postgres-airman-test-{version.replace(':', '_')}-{os.urandom(4).hex()}"
     )
     current_dir = Path(__file__).parent.absolute()
 

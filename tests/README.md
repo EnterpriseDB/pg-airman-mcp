@@ -1,6 +1,6 @@
-# PostgreSQL MCP Tests
+# Pg Airman MCP Tests
 
-This directory contains tests for the PostgreSQL MCP package.
+This directory contains tests for the Pg Airman MCP package.
 
 ## Running Tests
 

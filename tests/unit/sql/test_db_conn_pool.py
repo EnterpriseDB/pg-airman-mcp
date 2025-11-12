@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from postgres_mcp.sql.sql_driver import DbConnPool
+from pg_airman_mcp.sql.sql_driver import DbConnPool
 
 
 class AsyncContextManagerMock(AsyncMock):
@@ -47,7 +47,7 @@ def mock_pool():
 async def test_pool_connect_success(mock_pool):
     """Test successful connection to the database pool."""
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
         # Patch the connection test part to skip it
         with patch.object(
@@ -83,9 +83,9 @@ async def test_pool_connect_with_retry(mock_pool):
             return mock_pool
 
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
-        with patch("postgres_mcp.server.asyncio.sleep", AsyncMock()) as mock_sleep:
+        with patch("pg_airman_mcp.server.asyncio.sleep", AsyncMock()) as mock_sleep:
             with patch.object(DbConnPool, "pool_connect", mock_pool_connect):
                 db_pool = DbConnPool("postgresql://user:pass@localhost/db")
 
@@ -110,7 +110,7 @@ async def test_pool_connect_all_retries_fail(mock_pool):
 
     # Configure AsyncConnectionPool's constructor to return our mock
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
         # Mock sleep to speed up test
         with patch("asyncio.sleep", AsyncMock()):
@@ -130,7 +130,7 @@ async def test_pool_connect_all_retries_fail(mock_pool):
 async def test_close_pool(mock_pool):
     """Test closing the connection pool."""
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
         db_pool = DbConnPool("postgresql://user:pass@localhost/db")
 
@@ -155,7 +155,7 @@ async def test_close_handles_errors(mock_pool):
     mock_pool.close.side_effect = Exception("Error closing pool")
 
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
         db_pool = DbConnPool("postgresql://user:pass@localhost/db")
 
@@ -177,7 +177,7 @@ async def test_close_handles_errors(mock_pool):
 async def test_pool_connect_initialized(mock_pool):
     """Test pool_connect when pool is already initialized."""
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
         db_pool = DbConnPool("postgresql://user:pass@localhost/db")
 
@@ -202,7 +202,7 @@ async def test_pool_connect_initialized(mock_pool):
 async def test_pool_connect_not_initialized(mock_pool):
     """Test pool_connect when pool is not yet initialized."""
     with patch(
-        "postgres_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
+        "pg_airman_mcp.sql.sql_driver.AsyncConnectionPool", return_value=mock_pool
     ):
         db_pool = DbConnPool("postgresql://user:pass@localhost/db")
 

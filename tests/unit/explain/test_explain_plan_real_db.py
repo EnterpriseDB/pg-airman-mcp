@@ -3,9 +3,9 @@ import logging
 
 import pytest
 
-from postgres_mcp.artifacts import ErrorResult, ExplainPlanArtifact
-from postgres_mcp.explain import ExplainPlanTool
-from postgres_mcp.sql import SqlDriver
+from pg_airman_mcp.artifacts import ErrorResult, ExplainPlanArtifact
+from pg_airman_mcp.explain import ExplainPlanTool
+from pg_airman_mcp.sql import SqlDriver
 
 logger = logging.getLogger(__name__)
 

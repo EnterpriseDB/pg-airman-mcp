@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from psycopg.sql import SQL, Literal
 
-from postgres_mcp.sql import SafeSqlDriver, SqlDriver
+from pg_airman_mcp.sql import SafeSqlDriver, SqlDriver
 
 
 @pytest_asyncio.fixture
@@ -25,7 +25,7 @@ async def test_select_statement(safe_driver, mock_sql_driver):
     query = "SELECT * FROM users WHERE age > 18"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -51,7 +51,7 @@ async def test_select_with_join(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -61,7 +61,7 @@ async def test_show_variable(safe_driver, mock_sql_driver):
     query = "SHOW search_path"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -82,7 +82,7 @@ async def test_select_with_arithmetic(safe_driver, mock_sql_driver):
     query = "SELECT id, price * quantity as total FROM orders"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -92,7 +92,7 @@ async def test_select_current_user(safe_driver, mock_sql_driver):
     query = "SELECT current_user"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -127,7 +127,7 @@ async def test_select_with_subquery(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -154,7 +154,7 @@ async def test_select_with_union(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -220,7 +220,7 @@ async def test_explain_plan(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -358,7 +358,7 @@ async def test_complex_index_metadata_select(safe_driver, mock_sql_driver):
     HAVING COUNT(array_agg(attname)) > 1"""
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -391,7 +391,7 @@ async def test_session_info_functions(safe_driver, mock_sql_driver):
     query = "SELECT current_user, current_database(), version()"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -401,7 +401,7 @@ async def test_blocking_pids_functions(safe_driver, mock_sql_driver):
     query = "SELECT pg_blocking_pids(1234)"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -411,7 +411,7 @@ async def test_logfile_functions(safe_driver, mock_sql_driver):
     query = "SELECT pg_current_logfile()"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -424,7 +424,7 @@ async def test_complex_session_info_queries(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -434,7 +434,7 @@ async def test_security_privilege_functions(safe_driver, mock_sql_driver):
     query = "SELECT has_table_privilege('user', 'table', 'SELECT')"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -471,7 +471,7 @@ async def test_complex_security_privilege_queries(safe_driver, mock_sql_driver):
     for query in queries:
         await safe_driver.execute_query(query)
         mock_sql_driver.execute_query.assert_awaited_with(
-            "/* crystaldba */ " + query, params=None, force_readonly=True
+            "/* enterprisedb */ " + query, params=None, force_readonly=True
         )
 
 
@@ -504,7 +504,7 @@ async def test_security_privilege_functions_with_subqueries(
     for query in queries:
         await safe_driver.execute_query(query)
         mock_sql_driver.execute_query.assert_awaited_with(
-            "/* crystaldba */ " + query, params=None, force_readonly=True
+            "/* enterprisedb */ " + query, params=None, force_readonly=True
         )
 
 
@@ -526,7 +526,7 @@ async def test_like_patterns(safe_driver, mock_sql_driver, operator):
     for query in queries:
         await safe_driver.execute_query(query)
         mock_sql_driver.execute_query.assert_awaited_with(
-            "/* crystaldba */ " + query, params=None, force_readonly=True
+            "/* enterprisedb */ " + query, params=None, force_readonly=True
         )
 
 
@@ -562,7 +562,7 @@ async def test_datetime_functions(safe_driver, mock_sql_driver):
     for query in queries:
         await safe_driver.execute_query(query)
         mock_sql_driver.execute_query.assert_awaited_with(
-            "/* crystaldba */ " + query, params=None, force_readonly=True
+            "/* enterprisedb */ " + query, params=None, force_readonly=True
         )
 
 
@@ -591,7 +591,7 @@ async def test_type_conversion_functions(safe_driver, mock_sql_driver):
     for query in queries:
         await safe_driver.execute_query(query)
         mock_sql_driver.execute_query.assert_awaited_with(
-            "/* crystaldba */ " + query, params=None, force_readonly=True
+            "/* enterprisedb */ " + query, params=None, force_readonly=True
         )
 
 
@@ -601,7 +601,7 @@ async def test_regexp_functions(safe_driver, mock_sql_driver):
     query = "SELECT regexp_replace('Hello World', 'World', 'PostgreSQL')"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -616,7 +616,7 @@ async def test_complex_type_conversion_queries(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -626,7 +626,7 @@ async def test_network_functions(safe_driver, mock_sql_driver):
     query = "SELECT inet_client_addr(), inet_client_port()"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -641,7 +641,7 @@ async def test_network_functions_in_complex_queries(safe_driver, mock_sql_driver
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -651,7 +651,7 @@ async def test_notification_and_server_functions(safe_driver, mock_sql_driver):
     query = "SELECT pg_listening_channels(), pg_postmaster_start_time()"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -661,7 +661,7 @@ async def test_minmax_expressions(safe_driver, mock_sql_driver):
     query = "SELECT GREATEST(1, 2, 3), LEAST(1, 2, 3)"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -671,7 +671,7 @@ async def test_row_expressions(safe_driver, mock_sql_driver):
     query = "SELECT ROW(1, 2, 3) = ROW(1, 2, 3)"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -681,7 +681,7 @@ async def test_extension_check_query(safe_driver, mock_sql_driver):
     query = "SELECT extname, extversion FROM pg_extension WHERE extname = 'hypopg'"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -691,7 +691,7 @@ async def test_create_extension_query(safe_driver, mock_sql_driver):
     query = "CREATE EXTENSION IF NOT EXISTS hypopg"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -701,7 +701,7 @@ async def test_hypopg_create_index_query(safe_driver, mock_sql_driver):
     query = "SELECT * FROM hypopg_create_index('CREATE INDEX idx ON users(id)')"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -711,7 +711,7 @@ async def test_hypopg_reset_query(safe_driver, mock_sql_driver):
     query = "SELECT * FROM hypopg_reset()"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -721,7 +721,7 @@ async def test_hypopg_list_indexes_query(safe_driver, mock_sql_driver):
     query = "SELECT * FROM hypopg_list_indexes()"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -731,7 +731,7 @@ async def test_pg_stat_statements_query(safe_driver, mock_sql_driver):
     query = "SELECT * FROM pg_stat_statements ORDER BY calls DESC LIMIT 10"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -741,7 +741,7 @@ async def test_pg_indexes_query(safe_driver, mock_sql_driver):
     query = "SELECT * FROM pg_indexes WHERE schemaname = 'public'"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -751,7 +751,7 @@ async def test_pg_stats_query(safe_driver, mock_sql_driver):
     query = "SELECT * FROM pg_stats WHERE schemaname = 'public'"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -761,7 +761,7 @@ async def test_explain_query(safe_driver, mock_sql_driver):
     query = "EXPLAIN SELECT * FROM users"
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -789,7 +789,7 @@ async def test_sql_driver_parameter_format(safe_driver, mock_sql_driver):
 
     await safe_driver.execute_query(formatted_query)
     mock_sql_driver.execute_query.assert_awaited_with(
-        "/* crystaldba */ " + formatted_query, params=None, force_readonly=True
+        "/* enterprisedb */ " + formatted_query, params=None, force_readonly=True
     )
 
 
@@ -802,8 +802,8 @@ async def test_multiple_queries(safe_driver, mock_sql_driver):
     await safe_driver.execute_query(query2)
     mock_sql_driver.execute_query.assert_has_awaits(
         [
-            call("/* crystaldba */ " + query1, params=None, force_readonly=True),
-            call("/* crystaldba */ " + query2, params=None, force_readonly=True),
+            call("/* enterprisedb */ " + query1, params=None, force_readonly=True),
+            call("/* enterprisedb */ " + query2, params=None, force_readonly=True),
         ]
     )
 
@@ -820,7 +820,7 @@ async def test_query_with_comments(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )
 
 
@@ -837,5 +837,5 @@ async def test_query_with_whitespace(safe_driver, mock_sql_driver):
     """
     await safe_driver.execute_query(query)
     mock_sql_driver.execute_query.assert_awaited_once_with(
-        "/* crystaldba */ " + query, params=None, force_readonly=True
+        "/* enterprisedb */ " + query, params=None, force_readonly=True
     )

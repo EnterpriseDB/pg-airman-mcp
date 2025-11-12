@@ -3,8 +3,8 @@ import ast
 import mcp.types as types
 import pytest
 
-from postgres_mcp.server import get_object_details
-from postgres_mcp.sql import SqlDriver
+from pg_airman_mcp.server import get_object_details
+from pg_airman_mcp.sql import SqlDriver
 
 
 class MockRow:
@@ -45,7 +45,7 @@ async def test_get_object_details_table_with_comment(mock_sql_driver, monkeypatc
     async def mock_get_sql_driver():
         return mock_sql_driver
 
-    monkeypatch.setattr("postgres_mcp.server.get_sql_driver", mock_get_sql_driver)
+    monkeypatch.setattr("pg_airman_mcp.server.get_sql_driver", mock_get_sql_driver)
 
     # Mock the SafeSqlDriver.execute_param_query method
     async def mock_execute_param_query(driver, query, params):
@@ -105,7 +105,7 @@ async def test_get_object_details_table_with_comment(mock_sql_driver, monkeypatc
         return []
 
     monkeypatch.setattr(
-        "postgres_mcp.server.SafeSqlDriver.execute_param_query",
+        "pg_airman_mcp.server.SafeSqlDriver.execute_param_query",
         mock_execute_param_query,
     )
 
@@ -135,7 +135,7 @@ async def test_get_object_details_view_with_comment(mock_sql_driver, monkeypatch
     async def mock_get_sql_driver():
         return mock_sql_driver
 
-    monkeypatch.setattr("postgres_mcp.server.get_sql_driver", mock_get_sql_driver)
+    monkeypatch.setattr("pg_airman_mcp.server.get_sql_driver", mock_get_sql_driver)
 
     async def mock_execute_param_query(driver, query, params):
         if "d.description AS comment" in query and "d.objsubid = 0" in query:
@@ -171,7 +171,7 @@ async def test_get_object_details_view_with_comment(mock_sql_driver, monkeypatch
         return []
 
     monkeypatch.setattr(
-        "postgres_mcp.server.SafeSqlDriver.execute_param_query",
+        "pg_airman_mcp.server.SafeSqlDriver.execute_param_query",
         mock_execute_param_query,
     )
 
@@ -191,7 +191,7 @@ async def test_get_object_details_table_no_comment(mock_sql_driver, monkeypatch)
     async def mock_get_sql_driver():
         return mock_sql_driver
 
-    monkeypatch.setattr("postgres_mcp.server.get_sql_driver", mock_get_sql_driver)
+    monkeypatch.setattr("pg_airman_mcp.server.get_sql_driver", mock_get_sql_driver)
 
     async def mock_execute_param_query(driver, query, params):
         if "d.description AS comment" in query and "d.objsubid = 0" in query:
@@ -216,7 +216,7 @@ async def test_get_object_details_table_no_comment(mock_sql_driver, monkeypatch)
         return []
 
     monkeypatch.setattr(
-        "postgres_mcp.server.SafeSqlDriver.execute_param_query",
+        "pg_airman_mcp.server.SafeSqlDriver.execute_param_query",
         mock_execute_param_query,
     )
 
@@ -232,7 +232,7 @@ async def test_get_object_details_unsupported_type(mock_sql_driver, monkeypatch)
     async def mock_get_sql_driver():
         return mock_sql_driver
 
-    monkeypatch.setattr("postgres_mcp.server.get_sql_driver", mock_get_sql_driver)
+    monkeypatch.setattr("pg_airman_mcp.server.get_sql_driver", mock_get_sql_driver)
 
     result = await get_object_details("public", "test_object", "unsupported_type")
     assert "Error: Unsupported object type" in result[0].text
