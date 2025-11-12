@@ -1,4 +1,4 @@
-name: Postgres MCP linters
+name: Pg Airman MCP linters
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
       - "**/README.md"
 
 jobs:
-  postgres-mcp-ci:
+  pg-airman-mcp-ci:
     runs-on: ubuntu-latest
 
     steps:

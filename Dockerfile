@@ -33,11 +33,11 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-LABEL org.opencontainers.image.description="Postgres MCP Agent - Multi-architecture container (${TARGETPLATFORM})"
-LABEL org.opencontainers.image.source="https://github.com/crystaldba/postgres-mcp"
+LABEL org.opencontainers.image.description="Pg Airman MCP Agent - Multi-architecture container (${TARGETPLATFORM})"
+LABEL org.opencontainers.image.source="https://github.com/EnterpriseDB/pg-airman-mcp"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.vendor="Crystal DBA"
-LABEL org.opencontainers.image.url="https://www.crystaldba.ai"
+LABEL org.opencontainers.image.vendor="EnterpriseDB"
+LABEL org.opencontainers.image.url="https://www.enterprisedb.com"
 
 # Install runtime system dependencies
 RUN apt-get update && apt-get install -y \
@@ -53,9 +53,9 @@ RUN chmod +x /app/docker-entrypoint.sh
 # Expose the SSE port
 EXPOSE 8000
 
-# Run the postgres-mcp server
+# Run the pg-airman-mcp server
 # Users can pass a database URI or individual connection arguments:
-#   docker run -it --rm postgres-mcp postgres://user:pass@host:port/dbname
-#   docker run -it --rm postgres-mcp -h myhost -p 5432 -U myuser -d mydb
-ENTRYPOINT ["/app/docker-entrypoint.sh", "postgres-mcp"]
+#   docker run -it --rm pg-airman-mcp postgres://user:pass@host:port/dbname
+#   docker run -it --rm pg-airman-mcp -h myhost -p 5432 -U myuser -d mydb
+ENTRYPOINT ["/app/docker-entrypoint.sh", "pg-airman-mcp"]
 CMD []

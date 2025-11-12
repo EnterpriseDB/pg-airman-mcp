@@ -1,4 +1,4 @@
-name: Postgres MCP Tests
+name: Pg Airman MCP Tests
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  postgres-mcp-ci:
+  pg-airman-mcp-ci:
     runs-on: ubuntu-latest
 
     steps:
@@ -40,7 +40,7 @@ jobs:
         run: uv sync
 
       - name: Run Tests
-        run: uv run pytest -v --log-cli-level=INFO --cov-report=xml:coverage.xml --junitxml=pytest.xml --cov src/postgres_mcp/ --cov-report term tests/
+        run: uv run pytest -v --log-cli-level=INFO --cov-report=xml:coverage.xml --junitxml=pytest.xml --cov src/pg_airman_mcp/ --cov-report term tests/
 
       - name: Coverage comment
         uses: MishaKav/pytest-coverage-comment@main

@@ -1,5 +1,5 @@
 [project]
-name = "postgres-mcp"
+name = "pg-airman-mcp"
 version = "0.3.0"
 description = "PostgreSQL Tuning and Analysis Tool"
 readme = "README.md"
@@ -21,12 +21,20 @@ license-files = ["LICENSE"]
 name = "Johann Schleier-Smith"
 email = "jssmith@crystal.cloud"
 
+[[project.authors]]
+name = "Giulio Calacoci"
+email = "giulio.calacoci@enterprisedb.com"
+
+[[project.authors]]
+name = "Bilge Ince"
+email = "bilge.ince@enterprisedb.com"
+
 [build-system]
 requires = [ "hatchling",]
 build-backend = "hatchling.build"
 
 [project.scripts]
-postgres-mcp = "postgres_mcp:main"
+pg-airman-mcp = "pg_airman_mcp:main"
 
 # [tool.pyright]
 # venvPath = "."
@@ -77,7 +85,7 @@ docstring-code-line-length = 88
 convention = "google"
 
 [tool.ruff.lint.isort]
-known-first-party = ["postgres-mcp"]
+known-first-party = ["pg-airman-mcp"]
 
 [tool.pyright]
 typeCheckingMode = "standard"

@@ -62,7 +62,7 @@ in
 
   enterShell = ''
     hello
-    echo "Crystal DBA Agent Development Environment"
+    echo "PG Airman MCP Agent Development Environment"
   '';
 
   # https://devenv.sh/tasks/

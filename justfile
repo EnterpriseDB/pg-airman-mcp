@@ -6,10 +6,10 @@ default:
   just -u --list
 
 test:
-  npx @wong2/mcp-cli uv run python -m crystaldba.postgres_mcp
+  npx @wong2/mcp-cli uv run python -m enterprisedb.pg_airman_mcp
 
 dev:
-  uv run mcp dev -e . crystaldba/postgres_mcp/server.py
+  uv run mcp dev -e . enterprisedb/pg_airman_mcp/server.py
 
 nix-claude-desktop:
   NIXPKGS_ALLOW_UNFREE=1 nix run "github:k3d3/claude-desktop-linux-flake#claude-desktop-with-fhs" --impure
@@ -29,7 +29,7 @@ release version note extra="": # ="Release v{{version}}" extra="": # NOTE versio
     echo "Error: Do not include 'v' prefix in version. It will be added automatically."
     exit 1
   fi
-  uv build && git tag -a "v{{version}}" -m "Release v{{version}}" || true && git push --tags && gh release create "v{{version}}" --title "PostgreSQL MCP v{{version}}" --notes "{{note}}" {{extra}} dist/*.whl dist/*.tar.gz
+  uv build && git tag -a "v{{version}}" -m "Release v{{version}}" || true && git push --tags && gh release create "v{{version}}" --title "PG Airman MCP v{{version}}" --notes "{{note}}" {{extra}} dist/*.whl dist/*.tar.gz
 
 prerelease version rc note: #="Release candidate {{rc}} for version {{version}}":
   just release "{{version}}rc{{rc}}" "{{note}}" "--prerelease"

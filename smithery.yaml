@@ -18,4 +18,4 @@ startCommand:
   commandFunction:
     # A function that produces the CLI command to start the MCP on stdio.
     |-
-    (config) => ({command: '/app/docker-entrypoint.sh', args: ['postgres-mcp', '--access-mode',config.accessMode], env: {DATABASE_URI: config.databaseUri}})
+    (config) => ({command: '/app/docker-entrypoint.sh', args: ['pg-airman-mcp', '--access-mode',config.accessMode], env: {DATABASE_URI: config.databaseUri}})
