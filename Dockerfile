@@ -27,6 +27,20 @@ FROM python:3.12-slim-bookworm
 # Python executable must be the same, e.g., using `python:3.11-slim-bookworm`
 # will fail.
 
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  libpq-dev \
+  iputils-ping \
+  dnsutils \
+  net-tools \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r app --gid=1000 && \
+    useradd -r -g app --uid=1000 --home-dir=/app --shell=/bin/bash app && \
+    mkdir -p /app && \
+    chown -R app:app /app
+
 COPY --from=builder --chown=app:app /app /app
 
 ENV PATH="/app/.venv/bin:$PATH"
@@ -39,16 +53,12 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.vendor="EnterpriseDB"
 LABEL org.opencontainers.image.url="https://www.enterprisedb.com"
 
-# Install runtime system dependencies
-RUN apt-get update && apt-get install -y \
-  libpq-dev \
-  iputils-ping \
-  dnsutils \
-  net-tools \
-  && rm -rf /var/lib/apt/lists/*
-
-COPY docker-entrypoint.sh /app/
+COPY --chown=app:app docker-entrypoint.sh /app/
 RUN chmod +x /app/docker-entrypoint.sh
+
+# Switch to non-root user
+USER app
+WORKDIR /app
 
 # Expose the SSE port
 EXPOSE 8000
