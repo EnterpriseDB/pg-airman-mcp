@@ -35,6 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   net-tools \
   && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip to latest version
+RUN pip install --no-cache-dir --upgrade pip
+
 # Create non-root user
 RUN groupadd -r app --gid=1000 && \
     useradd -r -g app --uid=1000 --home-dir=/app --shell=/bin/bash app && \
