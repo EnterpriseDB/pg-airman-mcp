@@ -27,22 +27,19 @@ FROM python:3.12-slim-bookworm
 # Python executable must be the same, e.g., using `python:3.11-slim-bookworm`
 # will fail.
 
-# Install runtime system dependencies
+# Install runtime system dependencies, upgrade pip to latest version
+# and create non-root user.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  libpq-dev \
-  iputils-ping \
   dnsutils \
+  iputils-ping \
+  libpq-dev \
   net-tools \
-  && rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip to latest version
-RUN pip install --no-cache-dir --upgrade pip
-
-# Create non-root user
-RUN groupadd -r app --gid=1000 && \
-    useradd -r -g app --uid=1000 --home-dir=/app --shell=/bin/bash app && \
-    mkdir -p /app && \
-    chown -R app:app /app
+  && rm -rf /var/lib/apt/lists/* \
+  && pip install --no-cache-dir --upgrade pip \
+  && groupadd -r app --gid=1000 \
+  && useradd -r -g app --uid=1000 --home-dir=/app --shell=/bin/bash app \
+  && mkdir -p /app \
+  && chown -R app:app /app
 
 COPY --from=builder --chown=app:app /app /app
 
@@ -56,8 +53,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.vendor="EnterpriseDB"
 LABEL org.opencontainers.image.url="https://www.enterprisedb.com"
 
-COPY --chown=app:app docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+COPY --chown=app:app --chmod=755 docker-entrypoint.sh /app/
 
 # Switch to non-root user
 USER app
