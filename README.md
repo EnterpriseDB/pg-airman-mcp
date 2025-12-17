@@ -72,6 +72,19 @@ uv pip install pg-airman-mcp
 
 If you need to install `uv`, see the [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/).
 
+> **IMPORTANT:** Pg Airman MCP requires **Python 3.12+** and the [`psycopg`](https://www.psycopg.org/) package for database connectivity.  
+> If you install with Docker, all dependencies are included — no extra setup is needed.
+>
+> If you install with Python (`pipx` or `uv`), you may need:
+>
+> - A C compiler (e.g., `gcc`, `clang`)
+> - PostgreSQL client libraries and headers (e.g., `libpq-dev` on Debian/Ubuntu)
+> - Python development headers (e.g., `python3.12-dev` on Debian/Ubuntu)
+> - The `pg_config` utility in your system `PATH`
+>
+> If you see errors about missing `libpq` or `pg_config`, install the relevant packages for your OS.  
+> See the [psycopg installation docs](https://www.psycopg.org/psycopg3/docs/basic/install.html#install-pre) for details.
+
 ### Configure Your AI Assistant
 
 We provide full instructions for configuring Pg Airman MCP with Claude Desktop.
