@@ -11,7 +11,7 @@ ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 RUN apt-get update \
-  && apt-get install -y libpq-dev gcc \
+  && apt-get install -y --no-install-recommends gcc libpq-dev python3-dev \
   && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=cache,target=/root/.cache/uv \
   --mount=type=bind,source=uv.lock,target=uv.lock \
