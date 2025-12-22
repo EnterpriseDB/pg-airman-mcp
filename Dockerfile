@@ -41,6 +41,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && mkdir -p /app \
   && chown -R app:app /app
 
+# Clean up unnecessary packages installed by dependencies
+RUN apt-get purge -y libldap-2.5-0 libsqlite3-0 \
+  && apt-get autoremove -y
+
 COPY --from=builder --chown=app:app /app /app
 
 ENV PATH="/app/.venv/bin:$PATH"
