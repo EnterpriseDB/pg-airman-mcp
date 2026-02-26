@@ -120,7 +120,7 @@ class TextPresentation:
 
             # Prepare the response to send back to the caller
             include_langfuse_trace = (
-                os.environ.get("PG_AIRMAN_MCP_INCLUDE_LANGFUSE_TRACE", "true").lower()
+                os.environ.get("AIRMAN_MCP_INCLUDE_LANGFUSE_TRACE", "true").lower()
                 == "true"
             )
             langfuse_trace = (

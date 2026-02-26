@@ -1,8 +1,69 @@
 # ruff: noqa: B008
+# B008: Do not perform function call in argument defaults
+# Disabled because Pydantic Field() calls are required in function signatures
+# for tool registration
+"""
+Pg Airman MCP Server - PostgreSQL Database Management via Model Context
+Protocol.
+
+This module implements a Model Context Protocol (MCP) server that provides
+AI assistants with tools for PostgreSQL database management, query
+optimization, and health monitoring.
+
+Architecture Overview
+--------------------
+The server is built on FastMCP and provides 10 database management tools:
+  - Schema introspection (list_schemas, list_objects, get_object_details)
+  - Query optimization (explain_query, analyze_workload_indexes, analyze_query_indexes)
+  - Database health monitoring (analyze_db_health, get_top_queries)
+  - Metadata management (add_comment_to_object)
+  - SQL execution (execute_sql - access mode dependent)
+
+Configuration System
+-------------------
+Settings are loaded via Pydantic BaseSettings with a three-tier priority system:
+  1. Command-line arguments (highest priority)
+  2. Environment variables with AIRMAN_MCP_ prefix
+  3. Default values (lowest priority)
+
+Access Modes
+-----------
+- UNRESTRICTED: Full SQL execution capabilities (default)
+- RESTRICTED: Read-only queries with 30-second timeout via SafeSqlDriver
+
+Transport Options
+----------------
+- stdio: Standard input/output communication (default)
+- sse: Server-Sent Events over HTTP
+- streamable-http: Streamable HTTP transport
+
+Authentication
+-------------
+Optional OAuth 2.0 authentication with token introspection:
+  - Auth wiring is in auth_config.py (AuthContext, create_auth_context)
+  - Token verification via token_verifier.py (any RFC 7662 endpoint)
+  - Supports RFC 8707 resource validation
+  - All tools protected when auth is enabled
+  - Requires AIRMAN_MCP_SERVER_URL for stdio transport with auth
+
+Global State
+-----------
+Module-level globals used for server coordination:
+  - db_connection: PostgreSQL connection pool (DbConnPool)
+  - current_access_mode: Active access mode (AccessMode.UNRESTRICTED/RESTRICTED)
+  - is_stdio_transport: Flag for transport-specific shutdown behavior
+  - shutdown_event: Threading event for graceful shutdown coordination
+  - mcp: FastMCP server instance (created in main())
+
+Entry Point
+----------
+Run with: python -m pg_airman_mcp <database_url> [options]
+See main() function for complete CLI argument documentation.
+"""
+
 import argparse
 import asyncio
 import logging
-import os
 import signal
 import sys
 import threading
@@ -11,11 +72,18 @@ from typing import Any, Literal
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
-from pydantic import Field, validate_call
+from pydantic import Field, field_validator, validate_call
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pg_airman_mcp.index.dta_calc import DatabaseTuningAdvisor
 
 from .artifacts import ErrorResult, ExplainPlanArtifact
+from .auth_config import (
+    AuthContext,
+    add_auth_cli_args,
+    apply_auth_cli_overrides,
+    create_auth_context,
+)
 from .database_health import DatabaseHealthTool, HealthType
 from .explain import ExplainPlanTool
 from .index.index_opt_base import MAX_NUM_INDEX_TUNING_QUERIES
@@ -31,8 +99,9 @@ from .sql import (
 )
 from .top_queries import TopQueriesCalc
 
-# Initialize FastMCP with default settings
-mcp = FastMCP("pg-airman-mcp")
+# MCP server instance - created in main() with or without authentication
+# All tools are registered dynamically in create_mcp_server()
+mcp: FastMCP
 
 # Constants
 PG_STAT_STATEMENTS = "pg_stat_statements"
@@ -50,12 +119,259 @@ class AccessMode(str, Enum):
     RESTRICTED = "restricted"  # Read-only with safety features
 
 
+class ServerSettings(BaseSettings):
+    """
+    Configuration settings for the Pg Airman MCP Server.
+
+    All settings can be configured via:
+    1. Command-line arguments (takes precedence)
+    2. Environment variables with AIRMAN_MCP_ prefix
+    3. Default values (lowest priority)
+
+    Environment Variables:
+        AIRMAN_MCP_DATABASE_URL: PostgreSQL connection string
+        AIRMAN_MCP_ACCESS_MODE: SQL access mode (unrestricted or restricted)
+        AIRMAN_MCP_TRANSPORT: Transport type (stdio, sse, streamable-http)
+        AIRMAN_MCP_SSE_HOST: SSE server host (default: localhost)
+        AIRMAN_MCP_SSE_PORT: SSE server port (default: 8000)
+        AIRMAN_MCP_STREAMABLE_HTTP_HOST: Streamable HTTP host (default: localhost)
+        AIRMAN_MCP_STREAMABLE_HTTP_PORT: Streamable HTTP port (default: 8001)
+        AIRMAN_MCP_AUTH_ENABLED: Enable authentication (true/false)
+        AIRMAN_MCP_AUTH_SERVER_URL: Authorization server URL
+        AIRMAN_MCP_AUTH_INTROSPECTION_ENDPOINT: Token introspection endpoint
+        AIRMAN_MCP_AUTH_REQUIRED_SCOPES: Comma-separated OAuth scopes
+        AIRMAN_MCP_AUTH_VALIDATE_RESOURCE: Enable RFC 8707 validation (true/false)
+        AIRMAN_MCP_SERVER_URL: This server's URL (required for stdio with auth)
+
+    Example Usage:
+        # Via environment variables
+        export AIRMAN_MCP_DATABASE_URL="postgresql://user:pass@localhost/db"
+        export AIRMAN_MCP_ACCESS_MODE="restricted"
+        export AIRMAN_MCP_AUTH_ENABLED="true"
+        python -m pg_airman_mcp
+
+        # Via CLI (overrides environment)
+        python -m pg_airman_mcp "postgresql://..." --access-mode restricted
+
+        # Programmatically
+        settings = ServerSettings()
+        print(settings.database_url)
+    """
+
+    model_config = SettingsConfigDict(env_prefix="AIRMAN_MCP_", case_sensitive=False)
+
+    # Database configuration
+    database_url: str | None = Field(
+        default=None,
+        description="PostgreSQL connection URL",
+    )
+
+    # Access mode
+    access_mode: str = Field(
+        default="unrestricted",
+        description="SQL access mode: unrestricted or restricted",
+    )
+
+    # Transport configuration
+    transport: str = Field(
+        default="stdio",
+        description="MCP transport: stdio, sse, or streamable-http",
+    )
+    sse_host: str = Field(default="localhost", description="SSE server host")
+    sse_port: int = Field(default=8000, description="SSE server port")
+    streamable_http_host: str = Field(
+        default="localhost", description="Streamable HTTP server host"
+    )
+    streamable_http_port: int = Field(
+        default=8001, description="Streamable HTTP server port"
+    )
+
+    # Authentication configuration
+    auth_enabled: bool = Field(
+        default=False, description="Enable OAuth authentication for all tools"
+    )
+    auth_server_url: str = Field(
+        default="http://localhost:9000",
+        description="Authorization server base URL",
+    )
+    auth_introspection_endpoint: str | None = Field(
+        default=None,
+        description="Token introspection endpoint URL "
+        "(default: {auth-server-url}/introspect)",
+    )
+    auth_required_scopes: str = Field(
+        default="mcp:postgres:access",
+        description="Comma-separated list of required OAuth scopes",
+    )
+    auth_validate_resource: bool = Field(
+        default=False, description="Enable RFC 8707 resource validation"
+    )
+    auth_introspection_client_id: str | None = Field(
+        default=None,
+        description="Client ID for authenticating introspection requests",
+    )
+    auth_introspection_client_secret: str | None = Field(
+        default=None,
+        description="Client secret for authenticating introspection requests",
+    )
+    server_url: str | None = Field(
+        default=None,
+        description="This MCP server's URL (required for stdio transport with auth)",
+    )
+
+    @field_validator("access_mode")
+    @classmethod
+    def validate_access_mode(cls, v: str) -> str:
+        """Validate access mode is one of the allowed values."""
+        allowed = ["unrestricted", "restricted"]
+        if v.lower() not in allowed:
+            raise ValueError(f"access_mode must be one of {allowed}, got: {v}")
+        return v.lower()
+
+    @field_validator("transport")
+    @classmethod
+    def validate_transport(cls, v: str) -> str:
+        """Validate transport is one of the allowed values."""
+        allowed = ["stdio", "sse", "streamable-http"]
+        if v.lower() not in allowed:
+            raise ValueError(f"transport must be one of {allowed}, got: {v}")
+        return v.lower()
+
+    def get_required_scopes(self) -> list[str]:
+        """Parse required scopes from comma-separated string."""
+        return [s.strip() for s in self.auth_required_scopes.split(",") if s.strip()]
+
+    def determine_server_url(self) -> str | None:
+        """
+        Determine the server URL based on transport and configuration.
+
+        For stdio with auth, requires AIRMAN_MCP_SERVER_URL environment variable.
+        For SSE/HTTP transports, auto-generates from host:port.
+        """
+        if self.server_url:
+            return self.server_url
+
+        if not self.auth_enabled:
+            return None
+
+        if self.transport == "stdio":
+            # stdio with auth requires explicit server URL
+            return None  # Will be validated later
+        elif self.transport == "sse":
+            host = "localhost" if self.sse_host in ("0.0.0.0", "::") else self.sse_host
+            return f"http://{host}:{self.sse_port}"
+        elif self.transport == "streamable-http":
+            host = (
+                "localhost"
+                if self.streamable_http_host in ("0.0.0.0", "::")
+                else self.streamable_http_host
+            )
+            return f"http://{host}:{self.streamable_http_port}"
+
+        return None
+
+
 # Global variables
 db_connection = DbConnPool()
+_auth_context: AuthContext | None = None
 current_access_mode = AccessMode.UNRESTRICTED
-shutdown_in_progress = False
 is_stdio_transport = False
 shutdown_event = threading.Event()
+
+
+def create_mcp_server(
+    auth_context: AuthContext | None = None,
+) -> FastMCP:
+    """
+    Create FastMCP server with optional OAuth authentication.
+
+    Creates a new FastMCP instance (authenticated or not) and registers
+    all tools. This provides a single, unified registration path for both
+    authenticated and unauthenticated modes.
+
+    Args:
+        auth_context: Pre-configured auth objects from create_auth_context().
+            If None, server runs without authentication.
+
+    Returns:
+        Configured FastMCP server instance with all tools registered
+    """
+    server: FastMCP
+
+    global _auth_context
+    _auth_context = auth_context
+
+    if auth_context is None:
+        # Create unauthenticated server
+        logger.info("Authentication DISABLED - all tools are unprotected")
+        server = FastMCP("pg-airman-mcp")
+    else:
+        # Create authenticated FastMCP instance
+        server = FastMCP(
+            "pg-airman-mcp",
+            token_verifier=auth_context.token_verifier,
+            auth=auth_context.auth_settings,
+        )
+
+    # Register all tools on the server (works for both auth and no-auth)
+    server.add_tool(list_schemas, description="List all schemas in the database")
+    server.add_tool(list_objects, description="List objects in a schema with comments")
+    server.add_tool(
+        get_object_details,
+        description="Show detailed information about a database object with comments",
+    )
+    server.add_tool(
+        explain_query,
+        description="Explains the execution plan for a SQL query, showing how "
+        "the database will execute it and provides detailed cost estimates.",
+    )
+    server.add_tool(
+        analyze_workload_indexes,
+        description="Analyze frequently executed queries in the database and "
+        "recommend optimal indexes",
+    )
+    server.add_tool(
+        analyze_query_indexes,
+        description="Analyze a list of (up to 10) SQL queries and recommend "
+        "optimal indexes",
+    )
+    server.add_tool(
+        analyze_db_health,
+        description="Analyzes database health. Here are the available health "
+        "checks:\n- index - checks for invalid, duplicate, and bloated "
+        "indexes\n- connection - checks the number of connection and their "
+        "utilization\n- vacuum - checks vacuum health for transaction id "
+        "wraparound\n- sequence - checks sequences at risk of exceeding their "
+        "maximum value\n- replication - checks replication health including "
+        "lag and slots\n- buffer - checks for buffer cache hit rates for "
+        "indexes and tables\n- constraint - checks for invalid constraints\n- "
+        "all - runs all checks\nYou can optionally specify a single health "
+        "check or a comma-separated list of health checks. The default is "
+        "'all' checks.",
+    )
+    server.add_tool(
+        get_top_queries,
+        description="Reports the slowest or most resource-intensive queries "
+        f"using data from the '{PG_STAT_STATEMENTS}' extension.",
+        name="get_top_queries",
+    )
+    server.add_tool(
+        add_comment_to_object,
+        description="Adds a comment to a database object.",
+        name="add_comment_to_object",
+    )
+
+    # Note: execute_sql will be added separately in main() based on
+    # access mode (UNRESTRICTED vs RESTRICTED)
+
+    auth_status = (
+        "with authentication protection"
+        if auth_context is not None
+        else "without authentication"
+    )
+    logger.info(f"Registered 9 tools {auth_status}")
+
+    return server
 
 
 async def get_sql_driver() -> SqlDriver | SafeSqlDriver:
@@ -80,7 +396,6 @@ def format_error_response(error: str) -> ResponseType:
     return format_text_response(f"Error: {error}")
 
 
-@mcp.tool(description="List all schemas in the database")
 async def list_schemas() -> ResponseType:
     """List all schemas in the database."""
     try:
@@ -106,7 +421,6 @@ async def list_schemas() -> ResponseType:
         return format_error_response(str(e))
 
 
-@mcp.tool(description="List objects in a schema with comments")
 async def list_objects(
     schema_name: str = Field(description="Schema name"),
     object_type: str = Field(
@@ -253,7 +567,6 @@ async def list_objects(
         return format_error_response(str(e))
 
 
-@mcp.tool(description="Show detailed information about a database object with comments")
 async def get_object_details(
     schema_name: str = Field(description="Schema name"),
     object_name: str = Field(description="Object name"),
@@ -489,10 +802,6 @@ async def get_object_details(
         return format_error_response(str(e))
 
 
-@mcp.tool(
-    description="Explains the execution plan for a SQL query, showing how the database "
-    "will execute it and provides detailed cost estimates."
-)
 async def explain_query(
     sql: str = Field(description="SQL query to explain"),
     analyze: bool = Field(
@@ -596,10 +905,6 @@ async def execute_sql(
         return format_error_response(str(e))
 
 
-@mcp.tool(
-    description="Analyze frequently executed queries in the database and recommend "
-    "optimal indexes"
-)
 @validate_call
 async def analyze_workload_indexes(
     max_index_size_mb: int = Field(description="Max index size in MB", default=10000),
@@ -624,9 +929,6 @@ async def analyze_workload_indexes(
         return format_error_response(str(e))
 
 
-@mcp.tool(
-    description="Analyze a list of (up to 10) SQL queries and recommend optimal indexes"
-)
 @validate_call
 async def analyze_query_indexes(
     queries: list[str] = Field(description="List of Query strings to analyze"),
@@ -662,19 +964,6 @@ async def analyze_query_indexes(
         return format_error_response(str(e))
 
 
-@mcp.tool(
-    description="Analyzes database health. Here are the available health checks:\n"
-    "- index - checks for invalid, duplicate, and bloated indexes\n"
-    "- connection - checks the number of connection and their utilization\n"
-    "- vacuum - checks vacuum health for transaction id wraparound\n"
-    "- sequence - checks sequences at risk of exceeding their maximum value\n"
-    "- replication - checks replication health including lag and slots\n"
-    "- buffer - checks for buffer cache hit rates for indexes and tables\n"
-    "- constraint - checks for invalid constraints\n"
-    "- all - runs all checks\n"
-    "You can optionally specify a single health check or a comma-separated list of "
-    "health checks. The default is 'all' checks."
-)
 async def analyze_db_health(
     health_type: str = Field(
         description="Optional. Valid values are: "
@@ -694,11 +983,6 @@ async def analyze_db_health(
     return format_text_response(result)
 
 
-@mcp.tool(
-    name="get_top_queries",
-    description="Reports the slowest or most resource-intensive queries using data "
-    "from the '{PG_STAT_STATEMENTS}' extension.",
-)
 async def get_top_queries(
     sort_by: str = Field(
         description="Ranking criteria: 'total_time' for total execution time or "
@@ -712,6 +996,13 @@ async def get_top_queries(
         default=10,
     ),
 ) -> ResponseType:
+    """
+    Retrieve top queries from pg_stat_statements.
+
+    Args:
+        sort_by: Ranking criteria ('total_time', 'mean_time', or 'resources')
+        limit: Number of queries to return for time-based sorting
+    """
     try:
         sql_driver = await get_sql_driver()
         top_queries_tool = TopQueriesCalc(sql_driver=sql_driver)
@@ -735,9 +1026,6 @@ async def get_top_queries(
         return format_error_response(str(e))
 
 
-@mcp.tool(
-    name="add_comment_to_object", description="Adds a comment to a database object."
-)
 async def add_comment_to_object(
     schema_name: str = Field(description="Schema name"),
     object_type: str = Field(
@@ -799,55 +1087,143 @@ def signal_handler(signal, _) -> None:
         shutdown_event.set()
 
 
+def _setup_signal_handlers(transport: str):
+    """Configure OS signal handlers and set the global transport flag."""
+    global is_stdio_transport
+    is_stdio_transport = transport == "stdio"
+    if sys.platform != "win32":
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    else:
+        # On Windows, only SIGINT can be handled; SIGTERM is not supported.
+        signal.signal(signal.SIGINT, signal_handler)
+        logger.warning(
+            "Limited signal handling on Windows: only SIGINT is handled, SIGTERM "
+            "is not supported."
+        )
+
+
+async def _run_transport(settings: ServerSettings):
+    """Run the MCP server with the configured transport."""
+    if settings.transport == "stdio":
+        await mcp.run_stdio_async()
+    elif settings.transport == "sse":
+        mcp.settings.host = settings.sse_host
+        mcp.settings.port = settings.sse_port
+        await mcp.run_sse_async()
+    elif settings.transport == "streamable-http":
+        mcp.settings.host = settings.streamable_http_host
+        mcp.settings.port = settings.streamable_http_port
+        await mcp.run_streamable_http_async()
+
+
 async def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Pg Airman MCP Server")
-    parser.add_argument("database_url", help="Database connection URL", nargs="?")
+    # Load settings from environment variables first
+    settings = ServerSettings()
+
+    # Parse command line arguments (they override environment variables)
+    parser = argparse.ArgumentParser(
+        description="Pg Airman MCP Server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Environment Variables:
+  All CLI arguments can be set via environment variables with AIRMAN_MCP_ prefix.
+  For example: AIRMAN_MCP_DATABASE_URL, AIRMAN_MCP_ACCESS_MODE, etc.
+  CLI arguments take precedence over environment variables.
+        """,
+    )
+    parser.add_argument(
+        "database_url",
+        help="Database connection URL",
+        nargs="?",
+        default=settings.database_url,
+    )
     parser.add_argument(
         "--access-mode",
         type=str,
         choices=[mode.value for mode in AccessMode],
-        default=AccessMode.UNRESTRICTED.value,
-        help="Set SQL access mode: unrestricted (unrestricted) or restricted "
-        "(read-only with protections)",
+        default=settings.access_mode,
+        help=f"SQL access mode (default: {settings.access_mode})",
     )
     parser.add_argument(
         "--transport",
         type=str,
         choices=["stdio", "sse", "streamable-http"],
-        default="stdio",
-        help="Select MCP transport: stdio (default), sse or streamable-http",
+        default=settings.transport,
+        help=f"MCP transport (default: {settings.transport})",
     )
     parser.add_argument(
         "--sse-host",
         type=str,
-        default="localhost",
-        help="Host to bind SSE server to (default: localhost)",
+        default=settings.sse_host,
+        help=f"SSE server host (default: {settings.sse_host})",
     )
     parser.add_argument(
         "--sse-port",
         type=int,
-        default=8000,
-        help="Port for SSE server (default: 8000)",
+        default=settings.sse_port,
+        help=f"SSE server port (default: {settings.sse_port})",
     )
     parser.add_argument(
         "--streamable-http-host",
         type=str,
-        default="localhost",
-        help="Host to bind streamable http server to (default: localhost)",
+        default=settings.streamable_http_host,
+        help=f"Streamable HTTP host (default: {settings.streamable_http_host})",
     )
     parser.add_argument(
         "--streamable-http-port",
         type=int,
-        default=8001,
-        help="Port for streamable http server (default: 8001)",
+        default=settings.streamable_http_port,
+        help=f"Streamable HTTP port (default: {settings.streamable_http_port})",
     )
+    # Authentication arguments (delegated to auth_config)
+    add_auth_cli_args(parser, settings)
 
     args = parser.parse_args()
 
+    # Override settings with CLI arguments
+    settings.database_url = args.database_url or settings.database_url
+    settings.access_mode = args.access_mode
+    settings.transport = args.transport
+    settings.sse_host = args.sse_host
+    settings.sse_port = args.sse_port
+    settings.streamable_http_host = args.streamable_http_host
+    settings.streamable_http_port = args.streamable_http_port
+
+    # Auth CLI overrides (delegated to auth_config)
+    apply_auth_cli_overrides(settings, args)
+
+    # Parse required scopes
+    required_scopes = settings.get_required_scopes()
+
+    # Determine server URL based on transport
+    server_url = settings.determine_server_url()
+    if settings.auth_enabled and settings.transport == "stdio" and not server_url:
+        raise ValueError(
+            "When using --auth-enabled with stdio transport, you must set "
+            "AIRMAN_MCP_SERVER_URL environment variable (e.g., http://localhost:8000)"
+        )
+
+    # Create auth context if auth is enabled
+    auth_context = None
+    if settings.auth_enabled:
+        auth_context = create_auth_context(
+            auth_server_url=settings.auth_server_url,
+            server_url=server_url,  # type: ignore[arg-type]
+            introspection_endpoint=settings.auth_introspection_endpoint,
+            required_scopes=required_scopes,
+            validate_resource=settings.auth_validate_resource,
+            introspection_client_id=settings.auth_introspection_client_id,
+            introspection_client_secret=settings.auth_introspection_client_secret,
+        )
+
+    # Create MCP server with authentication configuration
+    global mcp
+    mcp = create_mcp_server(auth_context=auth_context)
+
     # Store the access mode in the global variable
     global current_access_mode
-    current_access_mode = AccessMode(args.access_mode)
+    current_access_mode = AccessMode(settings.access_mode)
 
     # Add the query tool with a description appropriate to the access mode
     if current_access_mode == AccessMode.UNRESTRICTED:
@@ -857,13 +1233,13 @@ async def main():
 
     logger.info(f"Starting Pg Airman MCP Server in {current_access_mode.upper()} mode")
 
-    # Get database URL from environment variable or command line
-    database_url = os.environ.get("DATABASE_URI", args.database_url)
+    # Get database URL
+    database_url = settings.database_url
 
     if not database_url:
         raise ValueError(
-            "Error: No database URL provided. Please specify via 'DATABASE_URI' "
-            "environment variable or command-line argument.",
+            "Error: No database URL provided. Please specify via "
+            "AIRMAN_MCP_DATABASE_URL environment variable or command-line argument."
         )
 
     # Initialize database connection pool
@@ -882,32 +1258,21 @@ async def main():
         )
 
     # Set up proper shutdown handling
-    if sys.platform != "win32":
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-    else:
-        # On Windows, only SIGINT can be handled; SIGTERM is not supported.
-        signal.signal(signal.SIGINT, signal_handler)
-        logger.warning(
-            "Limited signal handling on Windows: only SIGINT is handled, SIGTERM "
-            "is not supported."
-        )
-    global shutdown_in_progress, is_stdio_transport
-    is_stdio_transport = args.transport == "stdio"
+    _setup_signal_handlers(settings.transport)
     try:
         logger.info("Server starting...")
+        # Shutdown loop: Keeps server running until shutdown_event is set
+        # via signal handler (SIGINT/SIGTERM). The loop is necessary because:
+        # 1. stdio transport: run_stdio_async() blocks indefinitely on stdin
+        #    and returns when stdin closes. Without the loop, server exits
+        #    immediately on stdin closure instead of waiting for signal.
+        # 2. SSE/HTTP transports: run_*_async() methods handle their own
+        #    event loops but may return on certain conditions. The while loop
+        #    ensures the server stays alive until explicitly signaled.
+        # The asyncio.sleep(0.1) prevents a tight loop if transport methods
+        # return immediately, while still checking shutdown_event frequently.
         while not shutdown_event.is_set():
-            # Run the server with the selected transport (always async)
-            if args.transport == "stdio":
-                await mcp.run_stdio_async()
-            elif args.transport == "sse":
-                mcp.settings.host = args.sse_host
-                mcp.settings.port = args.sse_port
-                await mcp.run_sse_async()
-            elif args.transport == "streamable-http":
-                mcp.settings.host = args.streamable_http_host
-                mcp.settings.port = args.streamable_http_port
-                await mcp.run_streamable_http_async()
+            await _run_transport(settings)
             await asyncio.sleep(0.1)
         logger.info("Shutdown requested, cleaning up...")
         await shutdown()
@@ -939,6 +1304,13 @@ async def shutdown(sig=None):
 
     if sig:
         logger.info(f"Received exit signal {sig.name}")
+
+    # Close token verifier HTTP client
+    if _auth_context is not None:
+        try:
+            await _auth_context.token_verifier.close()
+        except Exception as e:
+            logger.error(f"Error closing token verifier: {e}")
 
     # Close database connections
     try:
