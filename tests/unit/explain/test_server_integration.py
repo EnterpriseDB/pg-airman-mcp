@@ -46,13 +46,13 @@ async def test_explain_query_integration():
             # Patch the ExplainPlanTool
             with patch("pg_airman_mcp.server.ExplainPlanTool"):
                 result = await explain_query(
-                    "SELECT * FROM users", hypothetical_indexes=None
+                    "SELECT * FROM users",
                 )
 
                 # Verify result matches our expected plan data
                 assert isinstance(result, list)
                 assert len(result) == 1
-                assert result[0].text == result_text
+                assert result[0].text == result_text  # type: ignore[union-attr]
 
 
 @pytest.mark.asyncio
@@ -74,13 +74,14 @@ async def test_explain_query_with_analyze_integration():
             # Patch the ExplainPlanTool
             with patch("pg_airman_mcp.server.ExplainPlanTool"):
                 result = await explain_query(
-                    "SELECT * FROM users", analyze=True, hypothetical_indexes=None
+                    "SELECT * FROM users",
+                    analyze=True,
                 )
 
                 # Verify result matches our expected plan data
                 assert isinstance(result, list)
                 assert len(result) == 1
-                assert result[0].text == result_text
+                assert result[0].text == result_text  # type: ignore[union-attr]
 
 
 @pytest.mark.asyncio
@@ -117,7 +118,7 @@ async def test_explain_query_with_hypothetical_indexes_integration():
                 # Verify result matches our expected plan data
                 assert isinstance(result, list)
                 assert len(result) == 1
-                assert result[0].text == result_text
+                assert result[0].text == result_text  # type: ignore[union-attr]
 
 
 @pytest.mark.asyncio
@@ -154,7 +155,7 @@ async def test_explain_query_missing_hypopg_integration():
                 # Verify result
                 assert isinstance(result, list)
                 assert len(result) == 1
-                assert missing_ext_message in result[0].text
+                assert missing_ext_message in result[0].text  # type: ignore[union-attr]
 
 
 @pytest.mark.asyncio
@@ -179,4 +180,4 @@ async def test_explain_query_error_handling_integration():
             # Verify error is correctly formatted
             assert isinstance(result, list)
             assert len(result) == 1
-            assert error_message in result[0].text
+            assert error_message in result[0].text  # type: ignore[union-attr]

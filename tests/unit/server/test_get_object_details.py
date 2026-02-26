@@ -176,7 +176,7 @@ async def test_get_object_details_view_with_comment(mock_sql_driver, monkeypatch
     )
 
     result = await get_object_details("public", "active_users_view", "view")
-    result_data = ast.literal_eval(result[0].text)
+    result_data = ast.literal_eval(result[0].text)  # type: ignore[union-attr]
 
     assert result_data["basic"]["comment"] == "This is a test view showing active users"
     assert len(result_data["columns"]) == 2
@@ -221,7 +221,7 @@ async def test_get_object_details_table_no_comment(mock_sql_driver, monkeypatch)
     )
 
     result = await get_object_details("public", "simple_table", "table")
-    result_data = ast.literal_eval(result[0].text)
+    result_data = ast.literal_eval(result[0].text)  # type: ignore[union-attr]
     assert result_data["basic"]["comment"] is None
 
 
@@ -235,4 +235,4 @@ async def test_get_object_details_unsupported_type(mock_sql_driver, monkeypatch)
     monkeypatch.setattr("pg_airman_mcp.server.get_sql_driver", mock_get_sql_driver)
 
     result = await get_object_details("public", "test_object", "unsupported_type")
-    assert "Error: Unsupported object type" in result[0].text
+    assert "Error: Unsupported object type" in result[0].text  # type: ignore[union-attr]
