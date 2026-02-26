@@ -8,6 +8,12 @@ replace_localhost() {
     local input_str="$1"
     local docker_host=""
 
+    if [[ -n "$KUBERNETES_SERVICE_HOST" ]]; then
+        echo "Kubernetes detected: Using localhost as-is for sidecar communication" >&2
+        echo "$input_str"
+        return 0
+    fi
+
     # Try to determine Docker host address
     if ping -c 1 -w 1 host.docker.internal >/dev/null 2>&1; then
         docker_host="host.docker.internal"
@@ -42,8 +48,7 @@ shift 1
 for arg in "$@"; do
     if [[ "$arg" == *"postgres"*"://"*"localhost"* ]]; then
         echo "Found localhost in database connection: $arg" >&2
-        new_arg=$(replace_localhost "$arg")
-        if [[ $? -eq 0 ]]; then
+        if new_arg=$(replace_localhost "$arg"); then
             processed_args+=("$new_arg")
         else
             processed_args+=("$arg")
@@ -53,12 +58,21 @@ for arg in "$@"; do
     fi
 done
 
-# Check and replace localhost in DATABASE_URI if it exists
-if [[ -n "$DATABASE_URI" && "$DATABASE_URI" == *"postgres"*"://"*"localhost"* ]]; then
-    echo "Found localhost in DATABASE_URI: $DATABASE_URI" >&2
-    new_uri=$(replace_localhost "$DATABASE_URI")
-    if [[ $? -eq 0 ]]; then
-        export DATABASE_URI="$new_uri"
+# --- Backward compatibility: bridge DATABASE_URI -> AIRMAN_MCP_DATABASE_URL ---
+if [[ -n "$DATABASE_URI" ]]; then
+    if [[ -z "$AIRMAN_MCP_DATABASE_URL" ]]; then
+        echo "WARNING: DATABASE_URI is deprecated. Use AIRMAN_MCP_DATABASE_URL instead." >&2
+        export AIRMAN_MCP_DATABASE_URL="$DATABASE_URI"
+    else
+        echo "WARNING: Both DATABASE_URI and AIRMAN_MCP_DATABASE_URL are set. Using AIRMAN_MCP_DATABASE_URL." >&2
+    fi
+fi
+
+# Check and replace localhost in AIRMAN_MCP_DATABASE_URL if it exists
+if [[ -n "$AIRMAN_MCP_DATABASE_URL" && "$AIRMAN_MCP_DATABASE_URL" == *"postgres"*"://"*"localhost"* ]]; then
+    echo "Found localhost in AIRMAN_MCP_DATABASE_URL: $AIRMAN_MCP_DATABASE_URL" >&2
+    if new_uri=$(replace_localhost "$AIRMAN_MCP_DATABASE_URL"); then
+        export AIRMAN_MCP_DATABASE_URL="$new_uri"
     fi
 fi
 
@@ -114,7 +128,7 @@ if [[ "$has_streamable_http" == true ]] && [[ "$has_streamable_http_port" == fal
 fi
 
 echo "----------------" >&2
-echo "Executing command:" >&2
+echo "Executing MCP server command:" >&2
 echo "${processed_args[@]}" >&2
 echo "----------------" >&2
 

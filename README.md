@@ -114,12 +114,12 @@ You will now edit the `mcpServers` section of the configuration file.
         "-i",
         "--rm",
         "-e",
-        "DATABASE_URI",
+        "AIRMAN_MCP_DATABASE_URL",
         "enterprisedb/pg-airman-mcp",
         "--access-mode=unrestricted"
       ],
       "env": {
-        "DATABASE_URI": "postgresql://username:password@localhost:5432/dbname"
+        "AIRMAN_MCP_DATABASE_URL": "postgresql://username:password@localhost:5432/dbname"
       }
     }
   }
@@ -142,7 +142,7 @@ The Pg Airman MCP Docker image will automatically remap the hostname `localhost`
         "--access-mode=unrestricted"
       ],
       "env": {
-        "DATABASE_URI": "postgresql://username:password@localhost:5432/dbname"
+        "AIRMAN_MCP_DATABASE_URL": "postgresql://username:password@localhost:5432/dbname"
       }
     }
   }
@@ -162,7 +162,7 @@ The Pg Airman MCP Docker image will automatically remap the hostname `localhost`
         "--access-mode=unrestricted"
       ],
       "env": {
-        "DATABASE_URI": "postgresql://username:password@localhost:5432/dbname"
+        "AIRMAN_MCP_DATABASE_URL": "postgresql://username:password@localhost:5432/dbname"
       }
     }
   }
@@ -225,7 +225,7 @@ For example, with Docker run:
 
 ```bash
 docker run -p 8000:8000 \
-  -e DATABASE_URI=postgresql://username:password@localhost:5432/dbname \
+  -e AIRMAN_MCP_DATABASE_URL=postgresql://username:password@localhost:5432/dbname \
   enterprisedb/pg-airman-mcp --access-mode=unrestricted --transport=sse
 ```
 
@@ -265,7 +265,7 @@ For example, with Docker run:
 
 ```bash
 docker run -p 8000:8000 \
-  -e DATABASE_URI=postgresql://username:password@localhost:5432/dbname \
+  -e AIRMAN_MCP_DATABASE_URL=postgresql://username:password@localhost:5432/dbname \
   enterprisedb/pg-airman-mcp --access-mode=unrestricted --transport=streamable-http
 ```
 
