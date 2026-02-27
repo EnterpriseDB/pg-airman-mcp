@@ -403,6 +403,7 @@ class TestMainFunctionIntegration:
             mock_settings_instance.access_mode = "unrestricted"
             mock_settings_instance.transport = "stdio"
             mock_settings_instance.auth_enabled = False
+            mock_settings_instance.build_transport_security.return_value = None
             mock_settings.return_value = mock_settings_instance
 
             # Should raise ValueError

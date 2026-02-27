@@ -30,6 +30,9 @@ class TestServerSettings:
         assert settings.auth_introspection_client_id is None
         assert settings.auth_introspection_client_secret is None
         assert settings.server_url is None
+        assert settings.dns_rebinding_protection is False
+        assert settings.allowed_hosts == ""
+        assert settings.allowed_origins == ""
 
     def test_custom_values(self):
         """Test custom values override defaults."""
@@ -207,7 +210,9 @@ class TestCreateMcpServer:
             server = create_mcp_server(auth_context=None)
 
             # Should create FastMCP without auth parameters
-            mock_fastmcp.assert_called_once_with("pg-airman-mcp")
+            mock_fastmcp.assert_called_once_with(
+                "pg-airman-mcp", transport_security=None
+            )
             assert server == mock_instance
 
             # Should register 9 tools (execute_sql added separately in main)
@@ -270,6 +275,22 @@ class TestCreateMcpServer:
 
             for tool in expected_tools:
                 assert tool in registered_tools, f"Tool {tool} not registered"
+
+    def test_transport_security_passed_to_fastmcp(self):
+        """Test transport_security is forwarded to FastMCP constructor."""
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        with patch("pg_airman_mcp.server.FastMCP") as mock_fastmcp:
+            mock_instance = MagicMock()
+            mock_fastmcp.return_value = mock_instance
+
+            security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=False,
+            )
+            create_mcp_server(auth_context=None, transport_security=security)
+
+            call_kwargs = mock_fastmcp.call_args.kwargs
+            assert call_kwargs["transport_security"] is security
 
 
 class TestServerSettingsEnvironmentIntegration:
@@ -344,3 +365,131 @@ class TestServerSettingsEnvironmentIntegration:
             settings = ServerSettings()
             assert settings.access_mode == "restricted"
             assert settings.transport == "sse"
+
+
+class TestBuildTransportSecurity:
+    """Test ServerSettings.build_transport_security()."""
+
+    def test_defaults_return_protection_disabled(self):
+        """Default settings (dns_rebinding_protection=False) disable protection."""
+        settings = ServerSettings()
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.enable_dns_rebinding_protection is False
+
+    def test_enabled_without_hosts_returns_none(self):
+        """Enabling protection without allowed_hosts lets FastMCP handle defaults."""
+        settings = ServerSettings(dns_rebinding_protection=True)
+        assert settings.build_transport_security() is None
+
+    def test_allowed_hosts_enables_protection(self):
+        """Setting allowed_hosts enables protection with host list."""
+        settings = ServerSettings(allowed_hosts="myservice:*,localhost:*")
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.enable_dns_rebinding_protection is True
+        assert result.allowed_hosts == ["myservice:*", "localhost:*"]
+        assert result.allowed_origins == []
+
+    def test_allowed_hosts_and_origins(self):
+        """Both allowed_hosts and allowed_origins are parsed correctly."""
+        settings = ServerSettings(
+            allowed_hosts="myservice:8000",
+            allowed_origins="http://myservice:8000,http://localhost:8000",
+        )
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.allowed_hosts == ["myservice:8000"]
+        assert result.allowed_origins == [
+            "http://myservice:8000",
+            "http://localhost:8000",
+        ]
+
+    def test_strips_whitespace(self):
+        """Whitespace around comma-separated values is stripped."""
+        settings = ServerSettings(
+            allowed_hosts=" host1:* , host2:* , host3:* ",
+        )
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.allowed_hosts == ["host1:*", "host2:*", "host3:*"]
+
+    def test_empty_entries_filtered(self):
+        """Empty entries from trailing commas are filtered out."""
+        settings = ServerSettings(allowed_hosts="host1:*,,host2:*,")
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.allowed_hosts == ["host1:*", "host2:*"]
+
+    def test_whitespace_only_allowed_hosts_falls_through(self):
+        """Whitespace-only allowed_hosts falls through to flag check."""
+        settings = ServerSettings(allowed_hosts=" , , ")
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.enable_dns_rebinding_protection is False
+
+    def test_allowed_hosts_takes_priority_over_disabled(self):
+        """allowed_hosts enables protection even when disabled."""
+        settings = ServerSettings(
+            dns_rebinding_protection=False,
+            allowed_hosts="myservice:*",
+        )
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.enable_dns_rebinding_protection is True
+        assert result.allowed_hosts == ["myservice:*"]
+
+    def test_allowed_origins_without_hosts_enables_protection(self):
+        """allowed_origins alone enables protection without hosts."""
+        settings = ServerSettings(
+            allowed_origins="http://myapp:3000,http://localhost:3000",
+        )
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.enable_dns_rebinding_protection is True
+        assert result.allowed_hosts == []
+        assert result.allowed_origins == [
+            "http://myapp:3000",
+            "http://localhost:3000",
+        ]
+
+    def test_allowed_origins_with_enabled_flag_no_hosts(self):
+        """allowed_origins with dns_rebinding_protection=True, no hosts."""
+        settings = ServerSettings(
+            dns_rebinding_protection=True,
+            allowed_origins="http://myapp:3000",
+        )
+        result = settings.build_transport_security()
+        assert result is not None
+        assert result.enable_dns_rebinding_protection is True
+        assert result.allowed_hosts == []
+        assert result.allowed_origins == ["http://myapp:3000"]
+
+    def test_env_var_disabled(self):
+        """Protection disabled via environment variable."""
+        with patch.dict(
+            os.environ,
+            {
+                "AIRMAN_MCP_DNS_REBINDING_PROTECTION": "false",
+            },
+        ):
+            settings = ServerSettings()
+            assert settings.dns_rebinding_protection is False
+            result = settings.build_transport_security()
+            assert result is not None
+            assert result.enable_dns_rebinding_protection is False
+
+    def test_env_var_allowed_hosts(self):
+        """Allowed hosts load from environment variable and enable protection."""
+        with patch.dict(
+            os.environ,
+            {
+                "AIRMAN_MCP_ALLOWED_HOSTS": "svc:*,localhost:*",
+            },
+        ):
+            settings = ServerSettings()
+            assert settings.allowed_hosts == "svc:*,localhost:*"
+            result = settings.build_transport_security()
+            assert result is not None
+            assert result.enable_dns_rebinding_protection is True
+            assert result.allowed_hosts == ["svc:*", "localhost:*"]
