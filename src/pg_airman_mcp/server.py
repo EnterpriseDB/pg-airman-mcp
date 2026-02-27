@@ -72,6 +72,7 @@ from typing import Any, Literal
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field, field_validator, validate_call
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -142,6 +143,9 @@ class ServerSettings(BaseSettings):
         AIRMAN_MCP_AUTH_REQUIRED_SCOPES: Comma-separated OAuth scopes
         AIRMAN_MCP_AUTH_VALIDATE_RESOURCE: Enable RFC 8707 validation (true/false)
         AIRMAN_MCP_SERVER_URL: This server's URL (required for stdio with auth)
+        AIRMAN_MCP_DNS_REBINDING_PROTECTION: DNS rebinding protection
+        AIRMAN_MCP_ALLOWED_HOSTS: Allowed Host header values (CSV)
+        AIRMAN_MCP_ALLOWED_ORIGINS: Allowed Origin header values (CSV)
 
     Example Usage:
         # Via environment variables
@@ -219,6 +223,21 @@ class ServerSettings(BaseSettings):
         description="This MCP server's URL (required for stdio transport with auth)",
     )
 
+    # DNS rebinding protection
+    dns_rebinding_protection: bool = Field(
+        default=False,
+        description="Enable DNS rebinding protection for HTTP transports",
+    )
+    allowed_hosts: str = Field(
+        default="",
+        description="Comma-separated allowed Host header values "
+        "(e.g. 'myservice:*,localhost:*')",
+    )
+    allowed_origins: str = Field(
+        default="",
+        description="Comma-separated allowed Origin header values",
+    )
+
     @field_validator("access_mode")
     @classmethod
     def validate_access_mode(cls, v: str) -> str:
@@ -270,6 +289,38 @@ class ServerSettings(BaseSettings):
 
         return None
 
+    def build_transport_security(self) -> TransportSecuritySettings | None:
+        """Build TransportSecuritySettings from server configuration.
+
+        Returns:
+            TransportSecuritySettings if explicit configuration is provided,
+            None to let FastMCP apply its defaults.
+        """
+        hosts: list[str] = []
+        origins: list[str] = []
+
+        if self.allowed_hosts:
+            hosts = [h.strip() for h in self.allowed_hosts.split(",") if h.strip()]
+        if self.allowed_origins:
+            origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+        # allowed_hosts/allowed_origins take priority: if set, the user
+        # clearly wants protection enabled with a specific allowlist,
+        # regardless of the dns_rebinding_protection flag.
+        if hosts or origins:
+            return TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=hosts,
+                allowed_origins=origins,
+            )
+
+        if not self.dns_rebinding_protection:
+            return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+        # dns_rebinding_protection=True but no allowlists — let FastMCP
+        # apply its built-in defaults (localhost protection).
+        return None
+
 
 # Global variables
 db_connection = DbConnPool()
@@ -281,6 +332,7 @@ shutdown_event = threading.Event()
 
 def create_mcp_server(
     auth_context: AuthContext | None = None,
+    transport_security: TransportSecuritySettings | None = None,
 ) -> FastMCP:
     """
     Create FastMCP server with optional OAuth authentication.
@@ -292,6 +344,8 @@ def create_mcp_server(
     Args:
         auth_context: Pre-configured auth objects from create_auth_context().
             If None, server runs without authentication.
+        transport_security: DNS rebinding protection settings.
+            If None, FastMCP applies its defaults (protection for localhost).
 
     Returns:
         Configured FastMCP server instance with all tools registered
@@ -304,13 +358,14 @@ def create_mcp_server(
     if auth_context is None:
         # Create unauthenticated server
         logger.info("Authentication DISABLED - all tools are unprotected")
-        server = FastMCP("pg-airman-mcp")
+        server = FastMCP("pg-airman-mcp", transport_security=transport_security)
     else:
         # Create authenticated FastMCP instance
         server = FastMCP(
             "pg-airman-mcp",
             token_verifier=auth_context.token_verifier,
             auth=auth_context.auth_settings,
+            transport_security=transport_security,
         )
 
     # Register all tools on the server (works for both auth and no-auth)
@@ -1176,6 +1231,24 @@ Environment Variables:
         default=settings.streamable_http_port,
         help=f"Streamable HTTP port (default: {settings.streamable_http_port})",
     )
+    parser.add_argument(
+        "--dns-rebinding-protection",
+        action=argparse.BooleanOptionalAction,
+        default=settings.dns_rebinding_protection,
+        help="Enable DNS rebinding protection",
+    )
+    parser.add_argument(
+        "--allowed-hosts",
+        type=str,
+        default=settings.allowed_hosts,
+        help="Comma-separated allowed Host header values",
+    )
+    parser.add_argument(
+        "--allowed-origins",
+        type=str,
+        default=settings.allowed_origins,
+        help="Comma-separated allowed Origin header values",
+    )
     # Authentication arguments (delegated to auth_config)
     add_auth_cli_args(parser, settings)
 
@@ -1189,6 +1262,9 @@ Environment Variables:
     settings.sse_port = args.sse_port
     settings.streamable_http_host = args.streamable_http_host
     settings.streamable_http_port = args.streamable_http_port
+    settings.dns_rebinding_protection = args.dns_rebinding_protection
+    settings.allowed_hosts = args.allowed_hosts
+    settings.allowed_origins = args.allowed_origins
 
     # Auth CLI overrides (delegated to auth_config)
     apply_auth_cli_overrides(settings, args)
@@ -1217,9 +1293,15 @@ Environment Variables:
             introspection_client_secret=settings.auth_introspection_client_secret,
         )
 
-    # Create MCP server with authentication configuration
+    # Build transport security settings
+    transport_security = settings.build_transport_security()
+
+    # Create MCP server with authentication and transport security configuration
     global mcp
-    mcp = create_mcp_server(auth_context=auth_context)
+    mcp = create_mcp_server(
+        auth_context=auth_context,
+        transport_security=transport_security,
+    )
 
     # Store the access mode in the global variable
     global current_access_mode
