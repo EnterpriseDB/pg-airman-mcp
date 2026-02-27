@@ -297,6 +297,39 @@ For Windsurf, the format in `mcp_config.json` is slightly different:
 }
 ```
 
+## DNS Rebinding Protection
+
+When using SSE or Streamable HTTP transports, the MCP SDK includes [DNS rebinding protection](https://github.com/modelcontextprotocol/python-sdk/issues/1798) that validates incoming `Host` headers against an allowlist.
+This can cause **HTTP 421 Misdirected Request** errors when the server runs behind a reverse proxy, load balancer, or Kubernetes service where the `Host` header differs from `localhost`.
+
+By default, DNS rebinding protection is **disabled** to avoid breaking deployments behind proxies or Kubernetes services.
+You can enable and configure it explicitly using environment variables or CLI arguments.
+
+### Enabling Protection
+
+To enable protection with the SDK's built-in localhost allowlist:
+
+```bash
+AIRMAN_MCP_DNS_REBINDING_PROTECTION=true
+```
+
+Or via CLI:
+
+```bash
+pg-airman-mcp "postgresql://..." --transport=streamable-http --dns-rebinding-protection
+```
+
+### Custom Host Allowlist
+
+To enable protection with a specific allowlist (setting `allowed_hosts` automatically enables protection):
+
+```bash
+AIRMAN_MCP_ALLOWED_HOSTS="pg-airman-mcp-service:*,localhost:*"
+AIRMAN_MCP_ALLOWED_ORIGINS="http://pg-airman-mcp-service:*,http://localhost:*"
+```
+
+Wildcard port patterns (e.g., `myservice:*`) match any port on that host.
+
 ## Authentication (Optional)
 
 Pg Airman MCP supports OAuth 2.0 authentication to protect all MCP tools with bearer tokens.
@@ -546,6 +579,9 @@ Environment variables use the `AIRMAN_MCP_` prefix.
 | `AIRMAN_MCP_SSE_PORT` | `--sse-port` | SSE server port | `8000` |
 | `AIRMAN_MCP_STREAMABLE_HTTP_HOST` | `--streamable-http-host` | Streamable HTTP server host | `localhost` |
 | `AIRMAN_MCP_STREAMABLE_HTTP_PORT` | `--streamable-http-port` | Streamable HTTP server port | `8001` |
+| `AIRMAN_MCP_DNS_REBINDING_PROTECTION` | `--dns-rebinding-protection` | Enable DNS rebinding protection | `false` |
+| `AIRMAN_MCP_ALLOWED_HOSTS` | `--allowed-hosts` | Comma-separated allowed Host header values | *(empty)* |
+| `AIRMAN_MCP_ALLOWED_ORIGINS` | `--allowed-origins` | Comma-separated allowed Origin header values | *(empty)* |
 
 ### Authentication Settings
 
