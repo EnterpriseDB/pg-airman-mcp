@@ -9,6 +9,7 @@ in
   # https://devenv.sh/packages/
   packages = with pkgs; [
     git
+    just
     postgresql_16
     pkgs-unstable.libgcc
   ];
@@ -19,12 +20,6 @@ in
   # };
 
   # https://devenv.sh/languages/
-  languages.javascript = {
-    enable = true;
-    package = pkgs-unstable.nodejs;
-    corepack.enable = true;
-  };
-
   languages.python = {
     enable = true;
     # version = "3.12";
