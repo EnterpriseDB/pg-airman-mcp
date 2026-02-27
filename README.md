@@ -2,7 +2,7 @@
 
 **A Postgres MCP server with index tuning, explain plans, health checks, and safe sql execution.**
 
-**[Overview](#overview)** • **[Quick Start](#quick-start)** • **[Technical Notes](#technical-notes)** • **[MCP API](#mcp-server-api)** • **[FAQ](#frequently-asked-questions)**
+**[Overview](#overview)** • **[Quick Start](#quick-start)** • **[Configuration Reference](#configuration-reference)** • **[Technical Notes](#technical-notes)** • **[MCP API](#mcp-server-api)** • **[FAQ](#frequently-asked-questions)**
 
 ## Overview
 
@@ -17,6 +17,7 @@ Features include:
 - **📈 Query Plans** - validate and optimize performance by reviewing EXPLAIN plans and simulating the impact of hypothetical indexes.
 - **🧠 Schema Intelligence** - context-aware SQL generation based on detailed understanding of the database schema.
 - **🛡️ Safe SQL Execution** - configurable access control, including support for read-only mode and safe SQL parsing, making it usable for both development and production.
+- **🔐 OAuth 2.0 Authentication** - optional token-based authentication using RFC 7662 introspection, protecting all MCP tools with bearer tokens validated against an external authorization server.
 
 Pg Airman MCP supports the following MCP transports for flexibility in different environments:
 
@@ -169,6 +170,8 @@ The Pg Airman MCP Docker image will automatically remap the hostname `localhost`
 }
 ```
 
+> **Note:** The examples above show basic configuration without authentication. To enable OAuth 2.0 authentication, see [Authentication](#authentication-optional) for Claude Desktop configuration examples with auth enabled.
+
 ##### Connection URI
 
 Replace `postgresql://...` with your [Postgres database connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
@@ -294,6 +297,127 @@ For Windsurf, the format in `mcp_config.json` is slightly different:
 }
 ```
 
+## Authentication (Optional)
+
+Pg Airman MCP supports OAuth 2.0 authentication to protect all MCP tools with bearer tokens.
+When enabled, every request must include a valid access token, which the MCP server validates by calling an authorization server's [token introspection endpoint (RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662).
+
+Authentication is disabled by default.
+When disabled, the server operates exactly as before with no authentication overhead.
+
+### How It Works
+
+1. An MCP client obtains an access token from the authorization server (e.g., `pg-airman-auth`).
+2. The client includes the token in requests to the MCP server via the `Authorization: Bearer {token}` header.
+3. The MCP server sends the token to the authorization server's introspection endpoint.
+4. If the token is active and valid, the request proceeds; otherwise, a `401 Unauthorized` response is returned.
+
+### Enabling Authentication
+
+Set the following environment variables:
+
+```bash
+AIRMAN_MCP_AUTH_ENABLED=true
+AIRMAN_MCP_AUTH_SERVER_URL=http://localhost:9000
+```
+
+Or use CLI arguments:
+
+```bash
+pg-airman-mcp "postgresql://..." --auth-enabled --auth-server-url http://localhost:9000
+```
+
+### Claude Desktop Configuration with Authentication
+
+#### Docker with Authentication
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "AIRMAN_MCP_DATABASE_URL",
+        "-e",
+        "AIRMAN_MCP_AUTH_ENABLED",
+        "-e",
+        "AIRMAN_MCP_AUTH_SERVER_URL",
+        "enterprisedb/pg-airman-mcp",
+        "--access-mode=unrestricted"
+      ],
+      "env": {
+        "AIRMAN_MCP_DATABASE_URL": "postgresql://username:password@localhost:5432/dbname",
+        "AIRMAN_MCP_AUTH_ENABLED": "true",
+        "AIRMAN_MCP_AUTH_SERVER_URL": "http://host.docker.internal:9000"
+      }
+    }
+  }
+}
+```
+
+> **Note:** Use `host.docker.internal` (MacOS/Windows) or `172.17.0.1` (Linux) to reach an authorization server running on the host.
+
+#### If you are using `pipx` or `uv`
+
+When using the `stdio` transport with authentication, you must set `AIRMAN_MCP_SERVER_URL` because the stdio transport does not have a natural HTTP endpoint, but the OAuth flow needs a server URL for resource validation.
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "pg-airman-mcp",
+      "args": [
+        "--access-mode=unrestricted",
+        "--auth-enabled",
+        "--auth-server-url", "http://localhost:9000"
+      ],
+      "env": {
+        "AIRMAN_MCP_DATABASE_URL": "postgresql://username:password@localhost:5432/dbname",
+        "AIRMAN_MCP_SERVER_URL": "http://localhost:8000"
+      }
+    }
+  }
+}
+```
+
+### Authentication with SSE or Streamable HTTP
+
+When using network transports, enable authentication via environment variables or CLI arguments:
+
+```bash
+docker run -p 8000:8000 \
+  -e AIRMAN_MCP_DATABASE_URL=postgresql://username:password@localhost:5432/dbname \
+  -e AIRMAN_MCP_AUTH_ENABLED=true \
+  -e AIRMAN_MCP_AUTH_SERVER_URL=http://auth-server:9000 \
+  enterprisedb/pg-airman-mcp --access-mode=unrestricted --transport=sse
+```
+
+The server URL is auto-detected from the host and port configuration for SSE and Streamable HTTP transports.
+
+### Authentication Environment Variables
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `AIRMAN_MCP_AUTH_ENABLED` | Enable OAuth authentication | `false` |
+| `AIRMAN_MCP_AUTH_SERVER_URL` | Authorization server base URL | `http://localhost:9000` |
+| `AIRMAN_MCP_AUTH_INTROSPECTION_ENDPOINT` | Token introspection endpoint URL | `{auth-server-url}/introspect` |
+| `AIRMAN_MCP_AUTH_REQUIRED_SCOPES` | Comma-separated required OAuth scopes | `mcp:postgres:access` |
+| `AIRMAN_MCP_AUTH_VALIDATE_RESOURCE` | Enable RFC 8707 resource validation | `false` |
+| `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_ID` | Client ID for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_SECRET` | Client secret for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_SERVER_URL` | This server's URL (required for stdio with auth) | *(auto-detected for SSE/HTTP)* |
+
+### Security Features
+
+- **SSRF prevention**: The introspection endpoint URL is validated to only allow `https://` URLs or `localhost`.
+- **SSL verification**: TLS certificate verification is enforced for all introspection requests.
+- **RFC 8707 resource validation**: Optionally validates that the token's resource claim matches the MCP server URL.
+- **Scope validation**: Requires tokens to have the configured scopes (default: `mcp:postgres:access`).
+
 ## Postgres Extension Installation (Optional)
 
 To enable index tuning and comprehensive performance analysis you need to load the `pg_stat_statements` and `hypopg` extensions on your database.
@@ -405,6 +529,43 @@ pursuits, so we’ve forked the project and will continue to add features.
 
 You and your needs are a critical driver for what we build.
 Tell us what you want to see by opening an [issue](https://github.com/EnterpriseDB/pg-airman-mcp/) or a [pull request](https://github.com/EnterpriseDB/pg-airman-mcp/pulls).
+
+## Configuration Reference
+
+All settings follow a three-tier priority: CLI arguments > environment variables > defaults.
+Environment variables use the `AIRMAN_MCP_` prefix.
+
+### Server Settings
+
+| Variable | CLI Argument | Description | Default |
+| -------- | ------------ | ----------- | ------- |
+| `AIRMAN_MCP_DATABASE_URL` | `database_url` (positional) | PostgreSQL connection URL | *(required)* |
+| `AIRMAN_MCP_ACCESS_MODE` | `--access-mode` | SQL access mode: `unrestricted` or `restricted` | `unrestricted` |
+| `AIRMAN_MCP_TRANSPORT` | `--transport` | MCP transport: `stdio`, `sse`, or `streamable-http` | `stdio` |
+| `AIRMAN_MCP_SSE_HOST` | `--sse-host` | SSE server host | `localhost` |
+| `AIRMAN_MCP_SSE_PORT` | `--sse-port` | SSE server port | `8000` |
+| `AIRMAN_MCP_STREAMABLE_HTTP_HOST` | `--streamable-http-host` | Streamable HTTP server host | `localhost` |
+| `AIRMAN_MCP_STREAMABLE_HTTP_PORT` | `--streamable-http-port` | Streamable HTTP server port | `8001` |
+
+### Authentication Settings
+
+| Variable | CLI Argument | Description | Default |
+| -------- | ------------ | ----------- | ------- |
+| `AIRMAN_MCP_AUTH_ENABLED` | `--auth-enabled` | Enable OAuth authentication | `false` |
+| `AIRMAN_MCP_AUTH_SERVER_URL` | `--auth-server-url` | Authorization server base URL | `http://localhost:9000` |
+| `AIRMAN_MCP_AUTH_INTROSPECTION_ENDPOINT` | `--auth-introspection-endpoint` | Token introspection endpoint URL | `{auth-server-url}/introspect` |
+| `AIRMAN_MCP_AUTH_REQUIRED_SCOPES` | `--auth-required-scopes` | Comma-separated required OAuth scopes | `mcp:postgres:access` |
+| `AIRMAN_MCP_AUTH_VALIDATE_RESOURCE` | `--auth-validate-resource` | Enable RFC 8707 resource validation | `false` |
+| `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_ID` | `--auth-introspection-client-id` | Client ID for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_SECRET` | `--auth-introspection-client-secret` | Client secret for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_SERVER_URL` | *(env only)* | This server's URL (required for stdio with auth) | *(auto-detected for SSE/HTTP)* |
+
+### Other Settings
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `ALLOW_COMMENT_IN_RESTRICTED` | Allow `COMMENT ON` writes in restricted mode | `true` |
+| `OPENAI_API_KEY` | OpenAI API key for experimental LLM-based index tuning | *(none)* |
 
 ## Technical Notes
 
