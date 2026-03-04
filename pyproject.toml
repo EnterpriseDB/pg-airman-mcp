@@ -102,3 +102,14 @@ reportMissingTypeArgument = true
 reportInvalidTypeVarUse = true
 reportUnnecessaryCast = true
 # reportUnnecessaryComparison = true
+
+[tool.uv]
+# Minimum versions for transitive dependencies to address known CVEs.
+# Remove individual entries once the direct dependency that pulls them in
+# raises its own lower bound past the fixed version.
+constraint-dependencies = [
+    "aiohttp>=3.13.3",          # CVE-2025-69223 through CVE-2025-69230 (via instructor)
+    "cryptography>=46.0.5",     # CVE-2026-26007
+    "python-multipart>=0.0.22", # CVE-2026-24486 (via mcp)
+    "urllib3>=2.6.3",           # CVE-2026-21441 (via docker/requests)
+]
