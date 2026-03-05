@@ -65,6 +65,7 @@ See main() function for complete CLI argument documentation.
 import argparse
 import asyncio
 import logging
+import os
 import re
 import signal
 import sys
@@ -78,7 +79,7 @@ from urllib.parse import quote
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import Field, field_validator, validate_call
+from pydantic import Field, field_validator, model_validator, validate_call
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pg_airman_mcp.index.dta_calc import DatabaseTuningAdvisor
@@ -151,6 +152,7 @@ class ServerSettings(BaseSettings):
 
     Environment Variables:
         AIRMAN_MCP_DATABASE_URL: PostgreSQL connection string
+        DATABASE_URI: Fallback for database URL if AIRMAN_MCP_DATABASE_URL is not set
         AIRMAN_MCP_ACCESS_MODE: SQL access mode (unrestricted or restricted)
         AIRMAN_MCP_TRANSPORT: Transport type (stdio, sse, streamable-http)
         AIRMAN_MCP_SSE_HOST: SSE server host (default: localhost)
@@ -301,6 +303,13 @@ class ServerSettings(BaseSettings):
                 f"(e.g. 'credit-scoring'), got: {v!r}"
             )
         return v
+
+    @model_validator(mode="after")
+    def apply_database_url_fallback(self) -> "ServerSettings":
+        """Apply DATABASE_URI fallback if database_url is not set."""
+        if self.database_url is None:
+            self.database_url = os.environ.get("DATABASE_URI")
+        return self
 
     def get_required_scopes(self) -> list[str]:
         """Parse required scopes from comma-separated string."""
