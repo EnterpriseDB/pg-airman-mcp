@@ -341,7 +341,6 @@ class TestServerSettingsEnvironmentIntegration:
         with patch.dict(
             os.environ,
             {
-                "DATABASE_URI": "postgresql://old:pass@host/db",
                 "MCP_DATABASE_URL": "postgresql://wrong:pass@host/db",
                 "PG_AIRMAN_ACCESS_MODE": "restricted",
             },
@@ -352,6 +351,31 @@ class TestServerSettingsEnvironmentIntegration:
             # Should use defaults, not old env var names
             assert settings.database_url is None
             assert settings.access_mode == "unrestricted"
+
+    def test_database_uri_fallback(self):
+        """Test that DATABASE_URI is used as fallback when database_url is not set."""
+        with patch.dict(
+            os.environ,
+            {
+                "DATABASE_URI": "postgresql://fallback:pass@host/db",
+            },
+            clear=True,
+        ):
+            settings = ServerSettings()
+            assert settings.database_url == "postgresql://fallback:pass@host/db"
+
+    def test_airman_mcp_database_url_takes_priority_over_database_uri(self):
+        """Test that AIRMAN_MCP_DATABASE_URL takes priority over DATABASE_URI."""
+        with patch.dict(
+            os.environ,
+            {
+                "AIRMAN_MCP_DATABASE_URL": "postgresql://primary:pass@host/db",
+                "DATABASE_URI": "postgresql://fallback:pass@host/db",
+            },
+            clear=True,
+        ):
+            settings = ServerSettings()
+            assert settings.database_url == "postgresql://primary:pass@host/db"
 
     def test_case_insensitive_env_vars(self):
         """Test that environment variables are case-insensitive."""
