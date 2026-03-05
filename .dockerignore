@@ -1,0 +1,41 @@
+# Version control
+.git/
+.gitignore
+
+# CI/CD and development
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Test and coverage
+tests/
+.pytest_cache/
+coverage.xml
+pytest.xml
+htmlcov/
+.coverage
+
+# Documentation and metadata (keep README.md — required by pyproject.toml)
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+personal/
+
+# Docker (prevent recursive builds)
+Dockerfile
+docker-compose*.yml
