@@ -660,6 +660,12 @@ class SafeSqlDriver(SqlDriver):
         "first_value",
         "last_value",
         "nth_value",
+        # AIDB Semantic KB Functions
+        "aidb.get_entity_definitions",
+        "aidb.get_metadata",
+        "aidb.list_semantic_kbs",
+        "aidb.refresh_semantic_kb",
+        "aidb.semantic_kb_stats",
     }
 
     ALLOWED_NODE_TYPES: ClassVar[set[type]] = ALLOWED_STMT_TYPES | {
@@ -954,11 +960,29 @@ class SafeSqlDriver(SqlDriver):
             elif isinstance(attr, Node):
                 self._validate_node(attr)
 
+    @staticmethod
+    def _normalize_placeholders(query: str) -> str:
+        """Replace psycopg %s placeholders with $N for pglast parsing."""
+        result = []
+        i = 0
+        n = 1
+        while i < len(query):
+            if query[i] == "%" and i + 1 < len(query) and query[i + 1] == "s":
+                result.append(f"${n}")
+                n += 1
+                i += 2
+            else:
+                result.append(query[i])
+                i += 1
+        return "".join(result)
+
     def _validate(self, query: str) -> None:
         """Validate query is safe to execute"""
         try:
+            # Convert %s placeholders to $N for pglast compatibility
+            parseable_query = self._normalize_placeholders(query)
             # Parse the SQL using pglast
-            parsed = pglast.parse_sql(query)
+            parsed = pglast.parse_sql(parseable_query)
             # Pretty print the parsed SQL for debugging
             # print("Parsed SQL:")
             # import pprint
@@ -1099,7 +1123,7 @@ async def execute_comment_on(
     sql_driver: SqlDriver | SafeSqlDriver,
     kind: str,
     identifiers: list[str],
-    comment: str,
+    comment: str | None,
     *,
     max_length: int = 5000,
 ) -> None:
@@ -1109,7 +1133,7 @@ async def execute_comment_on(
         sql_driver: SqlDriver or SafeSqlDriver instance.
         kind: One of TABLE, VIEW, COLUMN.
         identifiers: Ordered identifier parts (schema, table[, column]).
-        comment: Comment text.
+        comment: Comment text, or None to remove the comment.
         max_length: Optional cap on comment length.
     """
     normalized_kind = kind.upper()
@@ -1119,11 +1143,11 @@ async def execute_comment_on(
         raise ValueError("At least one identifier is required")
     if any(part is None or part == "" for part in identifiers):
         raise ValueError("Identifier parts must be non-empty strings")
-    if len(comment) > max_length:
+    if comment is not None and len(comment) > max_length:
         raise ValueError(f"Comment exceeds maximum length of {max_length} characters")
 
     qualified = ".".join(_quote_ident(p) for p in identifiers)
-    comment_literal = _quote_comment(comment)
+    comment_literal = "NULL" if comment is None else _quote_comment(comment)
     query = f"COMMENT ON {normalized_kind} {qualified} IS {comment_literal}"
 
     # If restricted mode, optionally disallow metadata writes and validate
@@ -1137,9 +1161,10 @@ async def execute_comment_on(
         sanitized_query = f"COMMENT ON {normalized_kind} {qualified} IS ''"
         sql_driver.validate_sql(sanitized_query)
         underlying = sql_driver.sql_driver
+        comment_info = "NULL" if comment is None else f"length={len(comment)}"
         logger.info(
-            f"""COMMENT ON {normalized_kind} {qualified} length={len(comment)}
-            in restricted mode"""
+            f"COMMENT ON {normalized_kind} {qualified} {comment_info} "
+            "in restricted mode"
         )
     else:
         underlying = sql_driver

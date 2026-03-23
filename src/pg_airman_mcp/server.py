@@ -90,6 +90,13 @@ from .explain import ExplainPlanTool
 from .index.index_opt_base import MAX_NUM_INDEX_TUNING_QUERIES
 from .index.llm_opt import LLMOptimizerTool
 from .index.presentation import TextPresentation
+from .semantics import (
+    get_semantic_kb_stats,
+    list_semantic_kbs,
+    refresh_semantic_kb,
+    remove_object_comment,
+    search_semantic_kb,
+)
 from .sql import (
     DbConnPool,
     SafeSqlDriver,
@@ -415,6 +422,26 @@ def create_mcp_server(
         description="Adds a comment to a database object.",
         name="add_comment_to_object",
     )
+    server.add_tool(
+        remove_comment,
+        description="Remove the comment from a table, view, or column",
+    )
+    server.add_tool(
+        search_kb,
+        description="Search semantic KB for tables/columns matching a query",
+    )
+    server.add_tool(
+        list_kbs,
+        description="List all available semantic knowledge bases",
+    )
+    server.add_tool(
+        get_kb_stats,
+        description="Get statistics about a semantic knowledge base",
+    )
+    server.add_tool(
+        refresh_kb,
+        description="Refresh semantic KB to sync with current schema metadata",
+    )
 
     # Note: execute_sql will be added separately in main() based on
     # access mode (UNRESTRICTED vs RESTRICTED)
@@ -424,7 +451,7 @@ def create_mcp_server(
         if auth_context is not None
         else "without authentication"
     )
-    logger.info(f"Registered 9 tools {auth_status}")
+    logger.info(f"Registered 14 tools {auth_status}")
 
     return server
 
@@ -1121,6 +1148,86 @@ async def add_comment_to_object(
         )
     except Exception as e:
         logger.error(f"Error executing comment statement: {e}")
+        return format_error_response(str(e))
+
+
+async def remove_comment(
+    schema_name: str = Field(description="Schema name containing the object"),
+    object_type: str = Field(description="Type: 'table', 'view', or 'column'"),
+    object_name: str = Field(description="Name of the table or view"),
+    column_name: str | None = Field(
+        default=None, description="Column name (required when object_type is 'column')"
+    ),
+) -> ResponseType:
+    """Remove comment from a database object by setting it to NULL."""
+    try:
+        sql_driver = await get_sql_driver()
+        result = await remove_object_comment(
+            sql_driver, schema_name, object_type, object_name, column_name
+        )
+        return format_text_response(result)
+    except Exception as e:
+        logger.error(f"Error removing comment: {e}")
+        return format_error_response(str(e))
+
+
+async def search_kb(
+    kb_name: str = Field(description="Name of the semantic knowledge base"),
+    query: str = Field(description="Natural language query"),
+    min_similarity: float = Field(
+        default=0.7, description="Minimum similarity (0.0-1.0)"
+    ),
+    entity_types: list[str] | None = Field(
+        default=None, description="Filter: 'Table', 'View', 'Column'"
+    ),
+    limit: int = Field(default=20, description="Maximum results"),
+) -> ResponseType:
+    """Search semantic KB for relevant schema elements."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await search_semantic_kb(
+            sql_driver, kb_name, query, min_similarity, entity_types, limit
+        )
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error searching semantic KB: {e}")
+        return format_error_response(str(e))
+
+
+async def list_kbs() -> ResponseType:
+    """List all semantic knowledge bases."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await list_semantic_kbs(sql_driver)
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error listing semantic KBs: {e}")
+        return format_error_response(str(e))
+
+
+async def get_kb_stats(
+    kb_name: str = Field(description="Name of the semantic knowledge base"),
+) -> ResponseType:
+    """Get semantic KB statistics."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await get_semantic_kb_stats(sql_driver, kb_name)
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error getting semantic KB stats: {e}")
+        return format_error_response(str(e))
+
+
+async def refresh_kb(
+    kb_name: str = Field(description="Name of the semantic knowledge base"),
+) -> ResponseType:
+    """Refresh semantic knowledge base."""
+    try:
+        sql_driver = await get_sql_driver()
+        result = await refresh_semantic_kb(sql_driver, kb_name)
+        return format_text_response(result)
+    except Exception as e:
+        logger.error(f"Error refreshing semantic KB: {e}")
         return format_error_response(str(e))
 
 

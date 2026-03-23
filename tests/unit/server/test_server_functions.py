@@ -570,6 +570,11 @@ class TestToolRegistration:
                 "analyze_db_health",
                 "get_top_queries",
                 "add_comment_to_object",
+                "remove_comment",
+                "search_kb",
+                "list_kbs",
+                "get_kb_stats",
+                "refresh_kb",
             ]
 
             assert len(registered_tools) == len(expected_tools)
@@ -652,7 +657,7 @@ class TestToolRegistration:
             create_mcp_server(auth_context=auth_ctx)
 
             # Should register same number of tools with auth
-            assert mock_instance.add_tool.call_count == 9
+            assert mock_instance.add_tool.call_count == 14
 
     def test_list_schemas_has_proper_signature(self):
         """Test list_schemas tool has expected parameters."""
