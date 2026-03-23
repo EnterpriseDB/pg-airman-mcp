@@ -17,7 +17,7 @@ Features include:
 - **📈 Query Plans** - validate and optimize performance by reviewing EXPLAIN plans and simulating the impact of hypothetical indexes.
 - **🧠 Schema Intelligence** - context-aware SQL generation based on detailed understanding of the database schema.
 - **🛡️ Safe SQL Execution** - configurable access control, including support for read-only mode and safe SQL parsing, making it usable for both development and production.
-- **🔐 OAuth 2.0 Authentication** - optional token-based authentication using RFC 7662 introspection, protecting all MCP tools with bearer tokens validated against an external authorization server.
+- **🔐 OAuth 2.0 Authentication** - optional token-based authentication supporting both RFC 7662 token introspection and local JWT validation (RS256, ES256), protecting all MCP tools with bearer tokens.
 
 Pg Airman MCP supports the following MCP transports for flexibility in different environments:
 
@@ -351,31 +351,55 @@ Wildcard port patterns (e.g., `myservice:*`) match any port on that host.
 ## Authentication (Optional)
 
 Pg Airman MCP supports OAuth 2.0 authentication to protect all MCP tools with bearer tokens.
-When enabled, every request must include a valid access token, which the MCP server validates by calling an authorization server's [token introspection endpoint (RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662).
+Two verification methods are available:
+
+- **Token Introspection** (default): Validates tokens by calling the authorization server's [introspection endpoint (RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662). Best when you need real-time revocation checking.
+- **JWT Verification**: Validates tokens locally using public keys from a [JWKS endpoint (RFC 7517)](https://datatracker.ietf.org/doc/html/rfc7517). Best for low-latency validation without per-request network calls.
 
 Authentication is disabled by default.
 When disabled, the server operates exactly as before with no authentication overhead.
 
+For detailed guidance on choosing between introspection and JWT, provider-specific examples, and migration instructions, see [JWT Authentication Guide](docs/jwt-authentication.md).
+
 ### How It Works
 
-1. An MCP client obtains an access token from the authorization server (e.g., `pg-airman-auth`).
+1. An MCP client obtains an access token from the authorization server.
 2. The client includes the token in requests to the MCP server via the `Authorization: Bearer {token}` header.
-3. The MCP server sends the token to the authorization server's introspection endpoint.
+3. The MCP server validates the token using the configured method:
+   - **Introspection**: Sends the token to the authorization server's introspection endpoint.
+   - **JWT**: Verifies the token signature locally using cached public keys from the JWKS endpoint.
 4. If the token is active and valid, the request proceeds; otherwise, a `401 Unauthorized` response is returned.
 
 ### Enabling Authentication
 
-Set the following environment variables:
+#### Token Introspection (default)
 
 ```bash
 AIRMAN_MCP_AUTH_ENABLED=true
 AIRMAN_MCP_AUTH_SERVER_URL=http://localhost:9000
 ```
 
-Or use CLI arguments:
+Or via CLI:
 
 ```bash
 pg-airman-mcp "postgresql://..." --auth-enabled --auth-server-url http://localhost:9000
+```
+
+#### JWT Verification
+
+```bash
+AIRMAN_MCP_AUTH_ENABLED=true
+AIRMAN_MCP_AUTH_TYPE=jwt
+AIRMAN_MCP_AUTH_SERVER_URL=https://auth.example.com
+AIRMAN_MCP_JWT_ISSUER=https://auth.example.com
+```
+
+Or via CLI:
+
+```bash
+pg-airman-mcp "postgresql://..." --auth-enabled --auth-type jwt \
+  --auth-server-url https://auth.example.com \
+  --jwt-issuer https://auth.example.com
 ```
 
 ### Claude Desktop Configuration with Authentication
@@ -454,18 +478,27 @@ The server URL is auto-detected from the host and port configuration for SSE and
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
 | `AIRMAN_MCP_AUTH_ENABLED` | Enable OAuth authentication | `false` |
+| `AIRMAN_MCP_AUTH_TYPE` | Authentication type: `introspection` or `jwt` | `introspection` |
 | `AIRMAN_MCP_AUTH_SERVER_URL` | Authorization server base URL | `http://localhost:9000` |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_ENDPOINT` | Token introspection endpoint URL | `{auth-server-url}/introspect` |
 | `AIRMAN_MCP_AUTH_REQUIRED_SCOPES` | Comma-separated required OAuth scopes | `mcp:postgres:access` |
 | `AIRMAN_MCP_AUTH_VALIDATE_RESOURCE` | Enable RFC 8707 resource validation | `false` |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_ID` | Client ID for introspection endpoint auth | *(none)* |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_SECRET` | Client secret for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_JWT_JWKS_URL` | JWKS endpoint URL (JWT mode) | `{auth-server-url}/.well-known/jwks.json` |
+| `AIRMAN_MCP_JWT_ISSUER` | Expected JWT `iss` claim (required for JWT mode) | *(none)* |
+| `AIRMAN_MCP_JWT_AUDIENCE` | Expected JWT `aud` claim | *(server URL)* |
+| `AIRMAN_MCP_JWT_ALGORITHMS` | Comma-separated signing algorithms | `RS256` |
+| `AIRMAN_MCP_JWT_CLOCK_SKEW` | Clock skew tolerance in seconds | `30` |
+| `AIRMAN_MCP_JWT_JWKS_CACHE_TTL` | JWKS cache TTL in seconds | `300` |
 | `AIRMAN_MCP_SERVER_URL` | This server's URL (required for stdio with auth) | *(auto-detected for SSE/HTTP)* |
 
 ### Security Features
 
-- **SSRF prevention**: The introspection endpoint URL is validated to only allow `https://` URLs or `localhost`.
-- **SSL verification**: TLS certificate verification is enforced for all introspection requests.
+- **SSRF prevention**: Introspection and JWKS endpoint URLs are validated to only allow `https://` URLs or `localhost`.
+- **SSL verification**: TLS certificate verification is enforced for all outbound requests.
+- **Algorithm restrictions** (JWT): Only asymmetric algorithms (RS256, RS384, RS512, ES256, ES384, ES512) are accepted. Symmetric algorithms (`HS*`) and `none` are explicitly rejected.
+- **JWKS caching** (JWT): Public keys are cached with a configurable TTL (default: 5 minutes) and rate-limited refresh on unknown key IDs.
 - **RFC 8707 resource validation**: Optionally validates that the token's resource claim matches the MCP server URL.
 - **Scope validation**: Requires tokens to have the configured scopes (default: `mcp:postgres:access`).
 
@@ -698,12 +731,19 @@ Environment variables use the `AIRMAN_MCP_` prefix.
 | Variable | CLI Argument | Description | Default |
 | -------- | ------------ | ----------- | ------- |
 | `AIRMAN_MCP_AUTH_ENABLED` | `--auth-enabled` | Enable OAuth authentication | `false` |
+| `AIRMAN_MCP_AUTH_TYPE` | `--auth-type` | Authentication type: `introspection` or `jwt` | `introspection` |
 | `AIRMAN_MCP_AUTH_SERVER_URL` | `--auth-server-url` | Authorization server base URL | `http://localhost:9000` |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_ENDPOINT` | `--auth-introspection-endpoint` | Token introspection endpoint URL | `{auth-server-url}/introspect` |
 | `AIRMAN_MCP_AUTH_REQUIRED_SCOPES` | `--auth-required-scopes` | Comma-separated required OAuth scopes | `mcp:postgres:access` |
 | `AIRMAN_MCP_AUTH_VALIDATE_RESOURCE` | `--auth-validate-resource` | Enable RFC 8707 resource validation | `false` |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_ID` | `--auth-introspection-client-id` | Client ID for introspection endpoint auth | *(none)* |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_SECRET` | `--auth-introspection-client-secret` | Client secret for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_JWT_JWKS_URL` | `--jwt-jwks-url` | JWKS endpoint URL | `{auth-server-url}/.well-known/jwks.json` |
+| `AIRMAN_MCP_JWT_ISSUER` | `--jwt-issuer` | Expected JWT `iss` claim (required for JWT) | *(none)* |
+| `AIRMAN_MCP_JWT_AUDIENCE` | `--jwt-audience` | Expected JWT `aud` claim | *(server URL)* |
+| `AIRMAN_MCP_JWT_ALGORITHMS` | `--jwt-algorithms` | Comma-separated signing algorithms | `RS256` |
+| `AIRMAN_MCP_JWT_CLOCK_SKEW` | `--jwt-clock-skew` | Clock skew tolerance in seconds | `30` |
+| `AIRMAN_MCP_JWT_JWKS_CACHE_TTL` | `--jwt-jwks-cache-ttl` | JWKS cache TTL in seconds | `300` |
 | `AIRMAN_MCP_SERVER_URL` | *(env only)* | This server's URL (required for stdio with auth) | *(auto-detected for SSE/HTTP)* |
 
 ### Other Settings
