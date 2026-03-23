@@ -33,6 +33,14 @@ class TestServerSettings:
         assert settings.dns_rebinding_protection is False
         assert settings.allowed_hosts == ""
         assert settings.allowed_origins == ""
+        # JWT-specific defaults
+        assert settings.auth_type == "introspection"
+        assert settings.jwt_jwks_url is None
+        assert settings.jwt_issuer is None
+        assert settings.jwt_audience is None
+        assert settings.jwt_algorithms == "RS256"
+        assert settings.jwt_clock_skew == 30
+        assert settings.jwt_jwks_cache_ttl == 300
 
     def test_custom_values(self):
         """Test custom values override defaults."""
@@ -91,6 +99,64 @@ class TestServerSettings:
         with pytest.raises(ValidationError) as exc:
             ServerSettings(access_mode="invalid")
         assert "access_mode must be one of" in str(exc.value)
+
+    def test_jwt_settings_custom_values(self):
+        """Test JWT fields can be set with custom values."""
+        settings = ServerSettings(
+            auth_type="jwt",
+            jwt_jwks_url="http://auth.example.com/jwks",
+            jwt_issuer="http://auth.example.com",
+            jwt_audience="http://resource.example.com",
+            jwt_algorithms="RS256,ES256",
+            jwt_clock_skew=60,
+            jwt_jwks_cache_ttl=600,
+        )
+        assert settings.auth_type == "jwt"
+        assert settings.jwt_jwks_url == "http://auth.example.com/jwks"
+        assert settings.jwt_issuer == "http://auth.example.com"
+        assert settings.jwt_audience == "http://resource.example.com"
+        assert settings.jwt_algorithms == "RS256,ES256"
+        assert settings.jwt_clock_skew == 60
+        assert settings.jwt_jwks_cache_ttl == 600
+
+    def test_auth_type_validation(self):
+        """Test auth_type validator rejects invalid values."""
+        with pytest.raises(ValidationError) as exc:
+            ServerSettings(auth_type="invalid")
+        assert "auth_type must be one of" in str(exc.value)
+
+    def test_auth_type_env_var(self):
+        """Test AIRMAN_MCP_AUTH_TYPE environment variable works."""
+        with patch.dict(os.environ, {"AIRMAN_MCP_AUTH_TYPE": "jwt"}):
+            settings = ServerSettings()
+            assert settings.auth_type == "jwt"
+
+    def test_jwt_env_vars(self):
+        """Test JWT-specific environment variables are loaded correctly."""
+        env_vars = {
+            "AIRMAN_MCP_JWT_JWKS_URL": "http://auth.test/jwks",
+            "AIRMAN_MCP_JWT_ISSUER": "http://auth.test",
+            "AIRMAN_MCP_JWT_AUDIENCE": "http://resource.test",
+            "AIRMAN_MCP_JWT_ALGORITHMS": "ES256,RS384",
+            "AIRMAN_MCP_JWT_CLOCK_SKEW": "45",
+            "AIRMAN_MCP_JWT_JWKS_CACHE_TTL": "120",
+        }
+        with patch.dict(os.environ, env_vars):
+            settings = ServerSettings()
+            assert settings.jwt_jwks_url == "http://auth.test/jwks"
+            assert settings.jwt_issuer == "http://auth.test"
+            assert settings.jwt_audience == "http://resource.test"
+            assert settings.jwt_algorithms == "ES256,RS384"
+            assert settings.jwt_clock_skew == 45
+            assert settings.jwt_jwks_cache_ttl == 120
+
+    def test_auth_type_case_insensitive(self):
+        """Test auth_type validator converts uppercase to lowercase."""
+        settings = ServerSettings(auth_type="JWT")
+        assert settings.auth_type == "jwt"
+
+        settings = ServerSettings(auth_type="INTROSPECTION")
+        assert settings.auth_type == "introspection"
 
     def test_transport_validator_valid(self):
         """Test transport validator accepts valid values."""
