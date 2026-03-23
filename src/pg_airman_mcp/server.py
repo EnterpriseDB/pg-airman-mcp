@@ -85,7 +85,9 @@ from pg_airman_mcp.index.dta_calc import DatabaseTuningAdvisor
 
 from .artifacts import ErrorResult, ExplainPlanArtifact
 from .auth_config import (
+    VALID_AUTH_TYPES,
     AuthContext,
+    JwtConfig,
     add_auth_cli_args,
     apply_auth_cli_overrides,
     create_auth_context,
@@ -159,10 +161,17 @@ class ServerSettings(BaseSettings):
         AIRMAN_MCP_STREAMABLE_HTTP_HOST: Streamable HTTP host (default: localhost)
         AIRMAN_MCP_STREAMABLE_HTTP_PORT: Streamable HTTP port (default: 8001)
         AIRMAN_MCP_AUTH_ENABLED: Enable authentication (true/false)
+        AIRMAN_MCP_AUTH_TYPE: Auth type: introspection or jwt
         AIRMAN_MCP_AUTH_SERVER_URL: Authorization server URL
         AIRMAN_MCP_AUTH_INTROSPECTION_ENDPOINT: Token introspection endpoint
         AIRMAN_MCP_AUTH_REQUIRED_SCOPES: Comma-separated OAuth scopes
         AIRMAN_MCP_AUTH_VALIDATE_RESOURCE: Enable RFC 8707 validation (true/false)
+        AIRMAN_MCP_JWT_JWKS_URL: JWKS endpoint URL for JWT verification
+        AIRMAN_MCP_JWT_ISSUER: Expected JWT issuer claim
+        AIRMAN_MCP_JWT_AUDIENCE: Expected JWT audience claim
+        AIRMAN_MCP_JWT_ALGORITHMS: Comma-separated JWT signing algorithms
+        AIRMAN_MCP_JWT_CLOCK_SKEW: JWT clock skew tolerance in seconds
+        AIRMAN_MCP_JWT_JWKS_CACHE_TTL: JWKS cache TTL in seconds
         AIRMAN_MCP_SERVER_URL: This server's URL (required for stdio with auth)
         AIRMAN_MCP_PURPOSE: Static purpose label for governance tracing
         AIRMAN_MCP_DNS_REBINDING_PROTECTION: DNS rebinding protection
@@ -221,6 +230,10 @@ class ServerSettings(BaseSettings):
     auth_enabled: bool = Field(
         default=False, description="Enable OAuth authentication for all tools"
     )
+    auth_type: str = Field(
+        default="introspection",
+        description="Auth type: introspection (RFC 7662) or jwt (local JWT validation)",
+    )
     auth_server_url: str = Field(
         default="http://localhost:9000",
         description="Authorization server base URL",
@@ -244,6 +257,33 @@ class ServerSettings(BaseSettings):
     auth_introspection_client_secret: str | None = Field(
         default=None,
         description="Client secret for authenticating introspection requests",
+    )
+
+    # JWT-specific configuration
+    jwt_jwks_url: str | None = Field(
+        default=None,
+        description="JWKS endpoint URL "
+        "(default: {auth-server-url}/.well-known/jwks.json)",
+    )
+    jwt_issuer: str | None = Field(
+        default=None,
+        description="Expected JWT issuer claim (required when auth_type=jwt)",
+    )
+    jwt_audience: str | None = Field(
+        default=None,
+        description="Expected JWT audience claim (default: server URL)",
+    )
+    jwt_algorithms: str = Field(
+        default="RS256",
+        description="Comma-separated JWT signing algorithms",
+    )
+    jwt_clock_skew: int = Field(
+        default=30,
+        description="JWT clock skew tolerance in seconds",
+    )
+    jwt_jwks_cache_ttl: int = Field(
+        default=300,
+        description="JWKS cache TTL in seconds",
     )
     server_url: str | None = Field(
         default=None,
@@ -307,6 +347,16 @@ class ServerSettings(BaseSettings):
                 f"(e.g. 'credit-scoring'), got: {v!r}"
             )
         return v
+
+    @field_validator("auth_type")
+    @classmethod
+    def validate_auth_type(cls, v: str) -> str:
+        """Validate auth type is one of the allowed values."""
+        if v.lower() not in VALID_AUTH_TYPES:
+            raise ValueError(
+                f"auth_type must be one of {list(VALID_AUTH_TYPES)}, got: {v}"
+            )
+        return v.lower()
 
     def get_required_scopes(self) -> list[str]:
         """Parse required scopes from comma-separated string."""
@@ -1670,11 +1720,20 @@ Environment Variables:
         auth_context = create_auth_context(
             auth_server_url=settings.auth_server_url,
             server_url=server_url,  # type: ignore[arg-type]
+            auth_type=settings.auth_type,  # type: ignore[arg-type]
             introspection_endpoint=settings.auth_introspection_endpoint,
             required_scopes=required_scopes,
             validate_resource=settings.auth_validate_resource,
             introspection_client_id=settings.auth_introspection_client_id,
             introspection_client_secret=settings.auth_introspection_client_secret,
+            jwt_config=JwtConfig(
+                jwks_url=settings.jwt_jwks_url,
+                issuer=settings.jwt_issuer,
+                audience=settings.jwt_audience,
+                algorithms=settings.jwt_algorithms,
+                clock_skew=settings.jwt_clock_skew,
+                jwks_cache_ttl=settings.jwt_jwks_cache_ttl,
+            ),
         )
 
     # Build transport security settings
@@ -1789,10 +1848,10 @@ async def shutdown(sig=None):
     if sig:
         logger.info(f"Received exit signal {sig.name}")
 
-    # Close token verifier HTTP client
-    if _auth_context is not None:
+    # Close token verifier HTTP client (both verifier implementations have close())
+    if _auth_context is not None and hasattr(_auth_context.token_verifier, "close"):
         try:
-            await _auth_context.token_verifier.close()
+            await _auth_context.token_verifier.close()  # type: ignore[attr-defined]
         except Exception as e:
             logger.error(f"Error closing token verifier: {e}")
 
