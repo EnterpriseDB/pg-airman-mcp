@@ -944,19 +944,11 @@ If there is no hypothetical index, you can pass an empty list.""",
                     sql, hypothetical_indexes
                 )
             except Exception:
-                raise  # Re-raise the original exception
+                raise
         elif analyze:
-            try:
-                # Use EXPLAIN ANALYZE
-                result = await explain_tool.explain_analyze(sql)
-            except Exception:
-                raise  # Re-raise the original exception
+            result = await explain_tool.explain_analyze(sql)
         else:
-            try:
-                # Use basic EXPLAIN
-                result = await explain_tool.explain(sql)
-            except Exception:
-                raise  # Re-raise the original exception
+            result = await explain_tool.explain(sql)
 
         if result and isinstance(result, ExplainPlanArtifact):
             return format_text_response(result.to_text())
@@ -981,7 +973,7 @@ async def execute_sql(
         rows = await sql_driver.execute_query(sql)  # type: ignore
         if rows is None:
             return format_text_response("No results")
-        return format_text_response(list([r.cells for r in rows]))
+        return format_text_response([r.cells for r in rows])
     except Exception as e:
         logger.error(f"Error executing query: {e}")
         return format_error_response(str(e))

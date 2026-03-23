@@ -400,16 +400,18 @@ class LLMOptimizerTool(IndexTuningBase):
 
                 def extract_indexes_from_node(node):
                     # Check if this is an index scan node
-                    if node.get("Node Type") in [
-                        "Index Scan",
-                        "Index Only Scan",
-                        "Bitmap Index Scan",
-                    ]:
-                        if "Index Name" in node and "Relation Name" in node:
-                            # Add the table name and index name
-                            indexes_used.add(
-                                (node["Relation Name"], node["Index Name"])
-                            )
+                    if (
+                        node.get("Node Type")
+                        in [
+                            "Index Scan",
+                            "Index Only Scan",
+                            "Bitmap Index Scan",
+                        ]
+                        and "Index Name" in node
+                        and "Relation Name" in node
+                    ):
+                        # Add the table name and index name
+                        indexes_used.add((node["Relation Name"], node["Index Name"]))
 
                     # Recursively process child plans
                     if "Plans" in node:
@@ -483,8 +485,8 @@ class LLMOptimizerTool(IndexTuningBase):
                 return tuple(columns)
             else:
                 logger.warning(f"No columns found for index {index_name}")
-                return tuple()
+                return ()
 
         except Exception as e:
             logger.error(f"Error getting columns for index {index_name}: {e!s}")
-            return tuple()
+            return ()

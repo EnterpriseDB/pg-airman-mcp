@@ -111,16 +111,14 @@ class DatabaseTuningAdvisor(IndexTuningBase):
             current_cost = await self._evaluate_configuration_cost(
                 query_weights, frozenset(seed)
             )
-            candidate_indexes = set(
-                {
-                    IndexRecommendation(
-                        c.table,
-                        tuple(c.columns),
-                        c.using,
-                    )
-                    for c in all_candidates
-                }
-            )
+            candidate_indexes = {
+                IndexRecommendation(
+                    c.table,
+                    tuple(c.columns),
+                    c.using,
+                )
+                for c in all_candidates
+            }
             final_indexes, final_cost = await self._enumerate_greedy(
                 query_weights, seed.copy(), current_cost, candidate_indexes - seed
             )
@@ -875,11 +873,7 @@ class ConditionColumnCollector(ColumnCollector):
 
         # If node is a column reference, it might be an alias
         if isinstance(node, ColumnRef) and hasattr(node, "fields") and node.fields:
-            fields = (
-                [f.sval for f in node.fields if hasattr(f, "sval")]
-                if node.fields
-                else []
-            )
+            fields = [f.sval for f in node.fields if hasattr(f, "sval")]
             if len(fields) == 1:
                 col_name = fields[0]
                 # Check if this is a known alias

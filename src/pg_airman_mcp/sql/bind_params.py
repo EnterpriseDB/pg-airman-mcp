@@ -719,12 +719,8 @@ class SqlBindParams:
         if "char" in data_type or data_type == "text":
             if is_like:
                 return "'%test%'"
-            elif common_vals and is_equality:
-                # Use the most common value for equality
-                sample = common_vals[0]
-                return f"'{sample}'"
             elif common_vals:
-                # Use any sample value
+                # Use the most common value
                 sample = common_vals[0]
                 return f"'{sample}'"
             else:

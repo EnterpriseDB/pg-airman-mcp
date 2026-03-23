@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -703,7 +702,7 @@ class IndexTuningBase(ABC):
                 return float("inf")
 
             return float(total_cost)
-        except (IndexError, KeyError, ValueError, json.JSONDecodeError) as e:
+        except (IndexError, KeyError, ValueError) as e:
             raise ValueError("Error extracting cost from plan") from e
 
     async def _get_table_size(self, table: str) -> int:

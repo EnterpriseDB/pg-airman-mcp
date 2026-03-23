@@ -246,9 +246,9 @@ class SqlDriver:
                 else:
                     await cursor.execute(query)
 
-                # For multiple statements, move to the last statement's results
+                # Consume any intermediate result sets from multi-statement queries
                 while cursor.nextset():
-                    pass
+                    continue
 
                 if cursor.description is None:  # No results (like DDL statements)
                     if not force_readonly:

@@ -684,8 +684,6 @@ class SafeSqlDriver(SqlDriver):
         WithClause,
         CommonTableExpr,
         # Basic operators
-        A_Expr,
-        BoolExpr,
         SubLink,
         MinMaxExpr,
         RowExpr,
@@ -944,14 +942,8 @@ class SafeSqlDriver(SqlDriver):
                 # Skip attributes that don't exist (this is normal in pglast)
                 continue
 
-            # Handle lists of nodes
-            if isinstance(attr, list):
-                for item in attr:
-                    if isinstance(item, Node):
-                        self._validate_node(item)
-
-            # Handle tuples of nodes
-            elif isinstance(attr, tuple):
+            # Handle lists and tuples of nodes
+            if isinstance(attr, list | tuple):
                 for item in attr:
                     if isinstance(item, Node):
                         self._validate_node(item)
