@@ -854,6 +854,7 @@ dependencies = [
     { name = "pglast" },
     { name = "psycopg", extra = ["c"] },
     { name = "psycopg-pool" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "pytest-cov" },
 ]
 
@@ -875,6 +876,7 @@ requires-dist = [
     { name = "pglast", specifier = "==7.2.0" },
     { name = "psycopg", extras = ["c"], specifier = ">=3.2.8" },
     { name = "psycopg-pool", specifier = ">=3.2.6" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.12.1" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
 ]
 
