@@ -12,11 +12,12 @@ optimization, and health monitoring.
 
 Architecture Overview
 --------------------
-The server is built on FastMCP and provides 10 database management tools:
+The server is built on FastMCP and provides database management tools:
   - Schema introspection (list_schemas, list_objects, get_object_details)
   - Query optimization (explain_query, analyze_workload_indexes, analyze_query_indexes)
   - Database health monitoring (analyze_db_health, get_top_queries)
-  - Metadata management (add_comment_to_object)
+  - Metadata management (add_comment_to_object, remove_comment)
+  - Semantic knowledge base (search_kb, list_kbs, get_kb_stats, refresh_kb)
   - SQL execution (execute_sql - access mode dependent)
 
 Configuration System
@@ -451,7 +452,7 @@ def create_mcp_server(
         if auth_context is not None
         else "without authentication"
     )
-    logger.info(f"Registered 14 tools {auth_status}")
+    logger.info(f"MCP server created {auth_status}")
 
     return server
 
@@ -1412,7 +1413,11 @@ Environment Variables:
     else:
         mcp.add_tool(execute_sql, description="Execute a read-only SQL query")
 
-    logger.info(f"Starting Pg Airman MCP Server in {current_access_mode.upper()} mode")
+    tool_count = len(await mcp.list_tools())
+    logger.info(
+        f"Starting Pg Airman MCP Server in {current_access_mode.upper()} mode "
+        f"with {tool_count} tools"
+    )
 
     # Get database URL
     database_url = settings.database_url
