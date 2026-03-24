@@ -27,7 +27,7 @@ from pg_airman_mcp.sql import SafeSqlDriver, SqlDriver
 logger = logging.getLogger(__name__)
 
 AIDB_TEST_DSN = os.environ.get(
-    "AIDB_TEST_DSN", "postgresql://bilge.ince@localhost:28816/aidb"
+    "AIDB_TEST_DSN", "postgresql://postgres@localhost:28816/aidb"
 )
 
 # Skip entire module if AIDB is not reachable

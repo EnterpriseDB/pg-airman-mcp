@@ -92,10 +92,15 @@ from .index.index_opt_base import MAX_NUM_INDEX_TUNING_QUERIES
 from .index.llm_opt import LLMOptimizerTool
 from .index.presentation import TextPresentation
 from .semantics import (
+    create_semantic_alias,
+    delete_semantic_alias,
+    execute_semantic_alias,
     get_semantic_kb_stats,
+    list_semantic_aliases,
     list_semantic_kbs,
     refresh_semantic_kb,
     remove_object_comment,
+    search_semantic_aliases,
     search_semantic_kb,
 )
 from .sql import (
@@ -442,6 +447,27 @@ def create_mcp_server(
     server.add_tool(
         refresh_kb,
         description="Refresh semantic KB to sync with current schema metadata",
+    )
+    server.add_tool(
+        create_alias,
+        description="Create a reusable semantic alias (parameterized SQL query "
+        "with semantic description for discovery)",
+    )
+    server.add_tool(
+        delete_alias,
+        description="Delete a semantic alias",
+    )
+    server.add_tool(
+        search_aliases,
+        description="Search semantic aliases by natural language query",
+    )
+    server.add_tool(
+        execute_alias,
+        description="Execute a semantic alias with parameter values",
+    )
+    server.add_tool(
+        list_aliases,
+        description="List all available semantic aliases",
     )
 
     # Note: execute_sql will be added separately in main() based on
@@ -1221,6 +1247,99 @@ async def refresh_kb(
         return format_text_response(result)
     except Exception as e:
         logger.error(f"Error refreshing semantic KB: {e}")
+        return format_error_response(str(e))
+
+
+async def create_alias(
+    kb_name: str = Field(description="Name of the semantic knowledge base"),
+    name: str = Field(description="Unique name for the semantic alias"),
+    description: str = Field(
+        description="Business description of what this query does"
+    ),
+    query_text: str = Field(
+        description="Complete SQL query with ${param_name} placeholders"
+    ),
+    parameters: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Parameter definitions as JSONB array of "
+        "{name, param_type, description} objects",
+    ),
+) -> ResponseType:
+    """Create a semantic alias for a reusable parameterized SQL query."""
+    try:
+        sql_driver = await get_sql_driver()
+        result = await create_semantic_alias(
+            sql_driver, kb_name, name, description, query_text, parameters
+        )
+        return format_text_response(result)
+    except Exception as e:
+        logger.error(f"Error creating semantic alias: {e}")
+        return format_error_response(str(e))
+
+
+async def delete_alias(
+    name: str = Field(description="Name of the semantic alias to delete"),
+) -> ResponseType:
+    """Delete a semantic alias."""
+    try:
+        sql_driver = await get_sql_driver()
+        result = await delete_semantic_alias(sql_driver, name)
+        return format_text_response(result)
+    except Exception as e:
+        logger.error(f"Error deleting semantic alias: {e}")
+        return format_error_response(str(e))
+
+
+async def search_aliases(
+    kb_name: str = Field(description="Name of the semantic knowledge base"),
+    query: str = Field(description="Natural language query"),
+    min_similarity: float = Field(
+        default=0.7, description="Minimum similarity (0.0-1.0)"
+    ),
+    limit: int = Field(default=10, description="Maximum results"),
+) -> ResponseType:
+    """Search semantic aliases by natural language query."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await search_semantic_aliases(
+            sql_driver, kb_name, query, min_similarity, limit
+        )
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error searching semantic aliases: {e}")
+        return format_error_response(str(e))
+
+
+async def execute_alias(
+    name: str = Field(description="Name of the semantic alias to execute"),
+    parameters: dict[str, Any] | None = Field(
+        default=None,
+        description="Parameter values as {param_name: value}",
+    ),
+    execute_as_role: str | None = Field(
+        default=None, description="Optional role to execute as"
+    ),
+) -> ResponseType:
+    """Execute a semantic alias with parameter values."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await execute_semantic_alias(
+            sql_driver, name, parameters, execute_as_role
+        )
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error executing semantic alias: {e}")
+        return format_error_response(str(e))
+
+
+async def list_aliases() -> ResponseType:
+    """List all available semantic aliases."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await list_semantic_aliases(sql_driver)
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error listing semantic aliases: {e}")
         return format_error_response(str(e))
 
 

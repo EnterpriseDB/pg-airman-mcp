@@ -211,6 +211,24 @@ COMMENT ON <KIND> <qualified_identifier> length=<N> in restricted mode
 
 If disabled you will receive an error: `COMMENT ON is not permitted in restricted mode`.
 
+### Semantic Alias Writes (Allowlist)
+
+Similarly, semantic alias write operations (`create_alias`, `delete_alias`) can be permitted in restricted mode via:
+
+```bash
+ALLOW_ALIAS_WRITE_IN_RESTRICTED=false   # default: false
+```
+
+Set this variable to `true` to allow creating and deleting semantic aliases when running with `--access-mode=restricted`. When enabled, alias write operations bypass `SafeSqlDriver` and use the underlying driver directly (same pattern as comment writes). Read-only alias operations (`search_aliases`, `execute_alias`, `list_aliases`) are always allowed regardless of this flag.
+
+When an alias write occurs in restricted mode the server logs:
+
+```text
+Alias write in restricted mode (ALLOW_ALIAS_WRITE_IN_RESTRICTED=true)
+```
+
+If disabled you will receive an error: `Semantic alias writes are not permitted in restricted mode`.
+
 #### Other MCP Clients
 
 Many MCP clients have similar configuration files to Claude Desktop, and you can adapt the examples above to work with the client of your choice.
@@ -524,6 +542,16 @@ Pg Airman MCP Tools:
 | `analyze_query_indexes` | Analyzes a list of specific SQL queries (up to 10) and recommends optimal indexes for them. |
 | `analyze_db_health` | Performs comprehensive health checks including: buffer cache hit rates, connection health, constraint validation, index health (duplicate/unused/invalid), sequence limits, and vacuum health. |
 | `add_comment_to_object` | Adds a comment to a table, view, or column (allowed in restricted mode only if `ALLOW_COMMENT_IN_RESTRICTED=true`). |
+| `remove_comment` | Remove the comment from a table, view, or column. |
+| `search_kb` | Search the semantic knowledge base for tables/columns matching a natural language query. |
+| `list_kbs` | List all available semantic knowledge bases. |
+| `get_kb_stats` | Get statistics about a semantic knowledge base (entity counts, pending updates). |
+| `refresh_kb` | Refresh semantic KB to sync with current schema metadata (unrestricted mode only). |
+| `create_alias` | Create a reusable semantic alias — a parameterized SQL query with semantic description for discovery. Requires `kb_name` to resolve the embedding model so the alias is searchable. Allowed in restricted mode only if `ALLOW_ALIAS_WRITE_IN_RESTRICTED=true`. |
+| `delete_alias` | Delete a semantic alias (allowed in restricted mode only if `ALLOW_ALIAS_WRITE_IN_RESTRICTED=true`). |
+| `search_aliases` | Search semantic aliases by natural language query using the embedding model from the given `kb_name`. |
+| `execute_alias` | Execute a semantic alias with parameter values. |
+| `list_aliases` | List all available semantic aliases with name, description, query text, and parameter count. |
 
 ## Frequently Asked Questions
 
@@ -548,6 +576,16 @@ We are building out a suite of AI-generated adversarial workloads designed to ch
 *What Postgres versions are supported?*
 Our testing presently focuses on Postgres 15, 16, 17, and 18.
 We plan to support Postgres versions 14 through 18.
+
+*How do I run AIDB integration tests?*
+Integration tests for semantic KB and alias features require a running PostgreSQL instance with the AIDB extension.
+By default, tests connect to `postgresql://postgres@localhost:28816/aidb`.
+Override this by setting the `AIDB_TEST_DSN` environment variable:
+
+```bash
+export AIDB_TEST_DSN="postgresql://myuser@localhost:28816/aidb"
+SKIP_AIDB_TESTS=0 uv run pytest tests/integration/semantics/ -v
+```
 
 *Who created this project?*
 This project was created by [Crystal DBA](https://www.crystaldba.ai).
@@ -601,6 +639,7 @@ Environment variables use the `AIRMAN_MCP_` prefix.
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
 | `ALLOW_COMMENT_IN_RESTRICTED` | Allow `COMMENT ON` writes in restricted mode | `true` |
+| `ALLOW_ALIAS_WRITE_IN_RESTRICTED` | Allow semantic alias create/delete in restricted mode | `false` |
 | `OPENAI_API_KEY` | OpenAI API key for experimental LLM-based index tuning | *(none)* |
 
 ## Technical Notes

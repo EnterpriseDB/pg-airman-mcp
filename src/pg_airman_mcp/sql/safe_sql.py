@@ -666,6 +666,13 @@ class SafeSqlDriver(SqlDriver):
         "aidb.list_semantic_kbs",
         "aidb.refresh_semantic_kb",
         "aidb.semantic_kb_stats",
+        # AIDB Semantic Alias Functions (read/execute only; writes go through
+        # dedicated tools gated by ALLOW_ALIAS_WRITE_IN_RESTRICTED)
+        "aidb.alias_param",
+        "aidb.alias_params",
+        "aidb.execute_semantic_alias",
+        "aidb.get_semantic_aliases",
+        "aidb.search_semantic_aliases",
     }
 
     ALLOWED_NODE_TYPES: ClassVar[set[type]] = ALLOWED_STMT_TYPES | {
@@ -1103,6 +1110,12 @@ def _quote_comment(text: str | None) -> str:
 # Environment-controlled flag (default true) for allowing comments in restricted mode
 ALLOW_COMMENT_IN_RESTRICTED = (
     os.getenv("ALLOW_COMMENT_IN_RESTRICTED", "true").lower() == "true"
+)
+
+# Environment-controlled flag (default false) for allowing semantic alias
+# write operations (create/delete) in restricted mode
+ALLOW_ALIAS_WRITE_IN_RESTRICTED = (
+    os.getenv("ALLOW_ALIAS_WRITE_IN_RESTRICTED", "false").lower() == "true"
 )
 
 # Metadata allowlist (extendable for future operations)

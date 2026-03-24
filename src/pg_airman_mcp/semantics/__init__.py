@@ -1,9 +1,17 @@
 """Semantics tools for Conversational Analytics.
 
-This module provides tools for managing table semantics and semantic knowledge base.
+This module provides tools for managing table semantics, semantic knowledge base,
+and semantic aliases (business SQL management and discovery).
 """
 
 from .comment_tools import remove_object_comment
+from .semantic_alias_tools import (
+    create_semantic_alias,
+    delete_semantic_alias,
+    execute_semantic_alias,
+    list_semantic_aliases,
+    search_semantic_aliases,
+)
 from .semantic_kb_tools import (
     get_semantic_kb_stats,
     list_semantic_kbs,
@@ -12,9 +20,14 @@ from .semantic_kb_tools import (
 )
 
 __all__ = [
+    "create_semantic_alias",
+    "delete_semantic_alias",
+    "execute_semantic_alias",
     "get_semantic_kb_stats",
+    "list_semantic_aliases",
     "list_semantic_kbs",
     "refresh_semantic_kb",
     "remove_object_comment",
+    "search_semantic_aliases",
     "search_semantic_kb",
 ]
