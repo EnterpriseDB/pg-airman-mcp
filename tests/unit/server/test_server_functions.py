@@ -460,6 +460,7 @@ class TestMainFunctionIntegration:
             # Mock MCP server
             mock_mcp = MagicMock()
             mock_mcp.add_tool = MagicMock()
+            mock_mcp.list_tools = AsyncMock(return_value=[])
             mock_mcp.run_stdio_async = AsyncMock()
             mock_create.return_value = mock_mcp
 
@@ -512,6 +513,7 @@ class TestMainFunctionIntegration:
 
             mock_mcp = MagicMock()
             mock_mcp.add_tool = MagicMock()
+            mock_mcp.list_tools = AsyncMock(return_value=[])
             mock_mcp.run_stdio_async = AsyncMock()
             mock_create.return_value = mock_mcp
 
@@ -906,6 +908,7 @@ class TestAuthBooleanFlags:
 
             mock_mcp = MagicMock()
             mock_mcp.add_tool = MagicMock()
+            mock_mcp.list_tools = AsyncMock(return_value=[])
             mock_mcp.run_stdio_async = AsyncMock()
             mock_create.return_value = mock_mcp
 
@@ -951,6 +954,7 @@ class TestAuthBooleanFlags:
 
             mock_mcp = MagicMock()
             mock_mcp.add_tool = MagicMock()
+            mock_mcp.list_tools = AsyncMock(return_value=[])
             mock_mcp.run_stdio_async = AsyncMock()
             mock_create.return_value = mock_mcp
 
