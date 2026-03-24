@@ -53,6 +53,7 @@ def create_auth_context(
     validate_resource: bool = False,
     introspection_client_id: str | None = None,
     introspection_client_secret: str | None = None,
+    allow_http_introspection: bool = False,
 ) -> AuthContext:
     """
     Create the auth objects (token verifier + AuthSettings) for an
@@ -100,6 +101,7 @@ def create_auth_context(
         validate_resource=validate_resource,
         client_id=introspection_client_id,
         client_secret=introspection_client_secret,
+        allow_http=allow_http_introspection,
     )
 
     if not introspection_client_id or not introspection_client_secret:
@@ -188,6 +190,12 @@ def add_auth_cli_args(
         default=settings.auth_introspection_client_secret,
         help="Client secret for authenticating introspection requests",
     )
+    parser.add_argument(
+        "--auth-allow-http-introspection",
+        action=argparse.BooleanOptionalAction,
+        default=settings.auth_allow_http_introspection,
+        help="Allow HTTP introspection endpoints (e.g. when Istio handles mTLS)",
+    )
 
 
 def apply_auth_cli_overrides(
@@ -208,3 +216,4 @@ def apply_auth_cli_overrides(
     settings.auth_validate_resource = args.auth_validate_resource
     settings.auth_introspection_client_id = args.auth_introspection_client_id
     settings.auth_introspection_client_secret = args.auth_introspection_client_secret
+    settings.auth_allow_http_introspection = args.auth_allow_http_introspection

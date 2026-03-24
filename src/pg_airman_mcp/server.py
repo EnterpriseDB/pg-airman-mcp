@@ -218,6 +218,11 @@ class ServerSettings(BaseSettings):
         default=None,
         description="Client secret for authenticating introspection requests",
     )
+    auth_allow_http_introspection: bool = Field(
+        default=False,
+        description="Allow HTTP (non-localhost) introspection endpoints. "
+        "Use when transport security is handled externally (e.g. Istio mTLS).",
+    )
     server_url: str | None = Field(
         default=None,
         description="This MCP server's URL (required for stdio transport with auth)",
@@ -1291,6 +1296,7 @@ Environment Variables:
             validate_resource=settings.auth_validate_resource,
             introspection_client_id=settings.auth_introspection_client_id,
             introspection_client_secret=settings.auth_introspection_client_secret,
+            allow_http_introspection=settings.auth_allow_http_introspection,
         )
 
     # Build transport security settings

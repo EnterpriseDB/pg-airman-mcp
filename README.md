@@ -442,11 +442,12 @@ The server URL is auto-detected from the host and port configuration for SSE and
 | `AIRMAN_MCP_AUTH_VALIDATE_RESOURCE` | Enable RFC 8707 resource validation | `false` |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_ID` | Client ID for introspection endpoint auth | *(none)* |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_SECRET` | Client secret for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_AUTH_ALLOW_HTTP_INTROSPECTION` | Allow HTTP (non-localhost) introspection endpoints | `false` |
 | `AIRMAN_MCP_SERVER_URL` | This server's URL (required for stdio with auth) | *(auto-detected for SSE/HTTP)* |
 
 ### Security Features
 
-- **SSRF prevention**: The introspection endpoint URL is validated to only allow `https://` URLs or `localhost`.
+- **SSRF prevention**: The introspection endpoint URL is validated to only allow `https://` URLs or `localhost`. Disable with `AIRMAN_MCP_AUTH_ALLOW_HTTP_INTROSPECTION=true` when transport security is handled externally (e.g. Istio mTLS).
 - **SSL verification**: TLS certificate verification is enforced for all introspection requests.
 - **RFC 8707 resource validation**: Optionally validates that the token's resource claim matches the MCP server URL.
 - **Scope validation**: Requires tokens to have the configured scopes (default: `mcp:postgres:access`).
@@ -594,6 +595,7 @@ Environment variables use the `AIRMAN_MCP_` prefix.
 | `AIRMAN_MCP_AUTH_VALIDATE_RESOURCE` | `--auth-validate-resource` | Enable RFC 8707 resource validation | `false` |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_ID` | `--auth-introspection-client-id` | Client ID for introspection endpoint auth | *(none)* |
 | `AIRMAN_MCP_AUTH_INTROSPECTION_CLIENT_SECRET` | `--auth-introspection-client-secret` | Client secret for introspection endpoint auth | *(none)* |
+| `AIRMAN_MCP_AUTH_ALLOW_HTTP_INTROSPECTION` | `--auth-allow-http-introspection` | Allow HTTP (non-localhost) introspection endpoints when transport security is handled externally (e.g. Istio mTLS) | `false` |
 | `AIRMAN_MCP_SERVER_URL` | *(env only)* | This server's URL (required for stdio with auth) | *(auto-detected for SSE/HTTP)* |
 
 ### Other Settings
