@@ -70,6 +70,7 @@ class IntrospectionTokenVerifier(TokenVerifier):
         validate_resource: bool = False,
         client_id: str | None = None,
         client_secret: str | None = None,
+        allow_http: bool = False,
     ):
         """
         Initialize the token verifier.
@@ -80,6 +81,8 @@ class IntrospectionTokenVerifier(TokenVerifier):
             validate_resource: Enable strict RFC 8707 resource validation
             client_id: OAuth client ID for introspection authentication
             client_secret: OAuth client secret for introspection authentication
+            allow_http: Allow HTTP (non-localhost) introspection endpoints.
+                Use when transport security is handled externally (e.g. Istio mTLS).
         """
         self.introspection_endpoint = introspection_endpoint
         self.server_url = server_url
@@ -87,6 +90,7 @@ class IntrospectionTokenVerifier(TokenVerifier):
         self.resource_url = resource_url_from_server_url(server_url)
         self.client_id = client_id
         self.client_secret = client_secret
+        self.allow_http = allow_http
         self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -147,19 +151,21 @@ class IntrospectionTokenVerifier(TokenVerifier):
         # SSRF prevention: Validate introspection endpoint URL.
         # Parse the URL and check scheme + exact hostname to prevent
         # prefix tricks (e.g., http://localhost.evil.com).
-        parsed = urlparse(self.introspection_endpoint)
-        is_https = parsed.scheme == "https"
-        is_local = parsed.scheme == "http" and parsed.hostname in (
-            "localhost",
-            "127.0.0.1",
-            "::1",
-        )
-        if not (is_https or is_local):
-            logger.warning(
-                f"Rejecting introspection endpoint with unsafe URL: "
-                f"{self.introspection_endpoint}"
+        # Skip when allow_http=True (e.g. Istio mTLS handles transport security).
+        if not self.allow_http:
+            parsed = urlparse(self.introspection_endpoint)
+            is_https = parsed.scheme == "https"
+            is_local = parsed.scheme == "http" and parsed.hostname in (
+                "localhost",
+                "127.0.0.1",
+                "::1",
             )
-            return None
+            if not (is_https or is_local):
+                logger.warning(
+                    f"Rejecting introspection endpoint with unsafe URL: "
+                    f"{self.introspection_endpoint}"
+                )
+                return None
 
         client = self._get_client()
         try:
