@@ -94,6 +94,7 @@ from .index.presentation import TextPresentation
 from .semantics import (
     create_semantic_alias,
     delete_semantic_alias,
+    discover_schema_for_question,
     execute_semantic_alias,
     get_semantic_kb_stats,
     list_semantic_aliases,
@@ -468,6 +469,11 @@ def create_mcp_server(
     server.add_tool(
         list_aliases,
         description="List all available semantic aliases",
+    )
+    server.add_tool(
+        discover_context,
+        description="Discover schema metadata and existing aliases "
+        "relevant to a business question (for SQL generation)",
     )
 
     # Note: execute_sql will be added separately in main() based on
@@ -1340,6 +1346,36 @@ async def list_aliases() -> ResponseType:
         return format_text_response(results)
     except Exception as e:
         logger.error(f"Error listing semantic aliases: {e}")
+        return format_error_response(str(e))
+
+
+async def discover_context(
+    question: str = Field(
+        description="The business question to find schema elements for"
+    ),
+    kb_name: str = Field(description="Semantic knowledge base to search"),
+    include_aliases: bool = Field(
+        default=True, description="Whether to also search semantic aliases"
+    ),
+    min_similarity: float = Field(
+        default=0.6, description="Minimum similarity threshold (0.0-1.0)"
+    ),
+    max_results: int = Field(default=15, description="Maximum results per category"),
+) -> ResponseType:
+    """Discover schema metadata and aliases relevant to a business question."""
+    try:
+        sql_driver = await get_sql_driver()
+        results = await discover_schema_for_question(
+            sql_driver,
+            kb_name,
+            question,
+            include_aliases,
+            min_similarity,
+            max_results,
+        )
+        return format_text_response(results)
+    except Exception as e:
+        logger.error(f"Error discovering context: {e}")
         return format_error_response(str(e))
 
 

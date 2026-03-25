@@ -552,6 +552,7 @@ Pg Airman MCP Tools:
 | `search_aliases` | Search semantic aliases by natural language query using the embedding model from the given `kb_name`. |
 | `execute_alias` | Execute a semantic alias with parameter values. |
 | `list_aliases` | List all available semantic aliases with name, description, query text, and parameter count. |
+| `discover_context` | Discover schema metadata and existing aliases relevant to a business question in a single call (for SQL generation). Combines `search_kb` and `search_aliases` with configurable similarity threshold and result limits. |
 
 ## Frequently Asked Questions
 
