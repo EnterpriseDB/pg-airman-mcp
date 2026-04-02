@@ -469,6 +469,40 @@ The server URL is auto-detected from the host and port configuration for SSE and
 - **RFC 8707 resource validation**: Optionally validates that the token's resource claim matches the MCP server URL.
 - **Scope validation**: Requires tokens to have the configured scopes (default: `mcp:postgres:access`).
 
+## Governance
+
+Pg Airman MCP provides governance features to help organizations track and audit AI agent interactions with their databases.
+
+### Purpose Logging
+
+The purpose feature allows you to label each Airman MCP instance with a static identifier that appears in PostgreSQL's `application_name` connection parameter. This enables database administrators to identify and audit connections by their intended use case.
+
+#### Enabling Purpose Logging
+
+Set the purpose via environment variable or CLI argument:
+
+```bash
+AIRMAN_MCP_PURPOSE=credit-scoring
+```
+
+Or via CLI:
+
+```bash
+pg-airman-mcp "postgresql://..." --purpose credit-scoring
+```
+
+#### Format Requirements
+
+The purpose value must be lowercase alphanumeric with hyphens only (e.g., `credit-scoring`, `fraud-detection`, `analytics-pipeline`). This constraint ensures consistent, parseable values in PostgreSQL logs and monitoring systems.
+
+#### How It Works
+
+When a purpose is configured, every database connection from this Airman instance includes it in the `application_name` connection parameter. Database administrators can then:
+
+- Filter `pg_stat_activity` by `application_name` to see active connections by purpose
+- Configure PostgreSQL logging to include `application_name` for audit trails
+- Set up monitoring alerts based on connection purposes
+
 ## Postgres Extension Installation (Optional)
 
 To enable index tuning and comprehensive performance analysis you need to load the `pg_stat_statements` and `hypopg` extensions on your database.
@@ -620,6 +654,7 @@ Environment variables use the `AIRMAN_MCP_` prefix.
 | `AIRMAN_MCP_STREAMABLE_HTTP_PORT` | `--streamable-http-port` | Streamable HTTP server port | `8001` |
 | `AIRMAN_MCP_DNS_REBINDING_PROTECTION` | `--dns-rebinding-protection` | Enable DNS rebinding protection | `false` |
 | `AIRMAN_MCP_ALLOWED_HOSTS` | `--allowed-hosts` | Comma-separated allowed Host header values | *(empty)* |
+| `AIRMAN_MCP_PURPOSE` | `--purpose` | Static purpose label for governance logging | *(none)* |
 | `AIRMAN_MCP_ALLOWED_ORIGINS` | `--allowed-origins` | Comma-separated allowed Origin header values | *(empty)* |
 
 ### Authentication Settings
