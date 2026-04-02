@@ -403,6 +403,7 @@ class TestMainFunctionIntegration:
             mock_settings_instance.access_mode = "unrestricted"
             mock_settings_instance.transport = "stdio"
             mock_settings_instance.auth_enabled = False
+            mock_settings_instance.purpose = None
             mock_settings_instance.build_transport_security.return_value = None
             mock_settings.return_value = mock_settings_instance
 
@@ -426,6 +427,7 @@ class TestMainFunctionIntegration:
             mock_settings_instance.access_mode = "unrestricted"
             mock_settings_instance.transport = "stdio"
             mock_settings_instance.auth_enabled = True
+            mock_settings_instance.purpose = None
             mock_settings_instance.determine_server_url = MagicMock(return_value=None)
             mock_settings_instance.get_required_scopes = MagicMock(return_value=[])
             mock_settings.return_value = mock_settings_instance
@@ -453,6 +455,7 @@ class TestMainFunctionIntegration:
             mock_settings_instance.access_mode = "unrestricted"
             mock_settings_instance.transport = "stdio"
             mock_settings_instance.auth_enabled = False
+            mock_settings_instance.purpose = None
             mock_settings_instance.determine_server_url = MagicMock(return_value=None)
             mock_settings_instance.get_required_scopes = MagicMock(return_value=[])
             mock_settings.return_value = mock_settings_instance
@@ -507,6 +510,7 @@ class TestMainFunctionIntegration:
             mock_settings_instance.access_mode = "restricted"
             mock_settings_instance.transport = "stdio"
             mock_settings_instance.auth_enabled = False
+            mock_settings_instance.purpose = None
             mock_settings_instance.determine_server_url = MagicMock(return_value=None)
             mock_settings_instance.get_required_scopes = MagicMock(return_value=[])
             mock_settings.return_value = mock_settings_instance
@@ -905,6 +909,7 @@ class TestAuthBooleanFlags:
             mock_settings_instance.database_url = "postgresql://test"
             mock_settings_instance.access_mode = "unrestricted"
             mock_settings_instance.transport = "stdio"
+            mock_settings_instance.purpose = None
             # Simulate env var setting auth_enabled = True
             mock_settings_instance.auth_enabled = True
             mock_settings_instance.auth_validate_resource = False
@@ -951,6 +956,7 @@ class TestAuthBooleanFlags:
             mock_settings_instance.database_url = "postgresql://test"
             mock_settings_instance.access_mode = "unrestricted"
             mock_settings_instance.transport = "stdio"
+            mock_settings_instance.purpose = None
             mock_settings_instance.auth_enabled = False
             # Simulate env var setting auth_validate_resource = True
             mock_settings_instance.auth_validate_resource = True
