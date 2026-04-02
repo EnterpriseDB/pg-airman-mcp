@@ -157,6 +157,7 @@ class ServerSettings(BaseSettings):
         AIRMAN_MCP_AUTH_REQUIRED_SCOPES: Comma-separated OAuth scopes
         AIRMAN_MCP_AUTH_VALIDATE_RESOURCE: Enable RFC 8707 validation (true/false)
         AIRMAN_MCP_SERVER_URL: This server's URL (required for stdio with auth)
+        AIRMAN_MCP_PURPOSE: Static purpose label for governance tracing
         AIRMAN_MCP_DNS_REBINDING_PROTECTION: DNS rebinding protection
         AIRMAN_MCP_ALLOWED_HOSTS: Allowed Host header values (CSV)
         AIRMAN_MCP_ALLOWED_ORIGINS: Allowed Origin header values (CSV)
@@ -235,6 +236,13 @@ class ServerSettings(BaseSettings):
     server_url: str | None = Field(
         default=None,
         description="This MCP server's URL (required for stdio transport with auth)",
+    )
+
+    # Governance
+    purpose: str | None = Field(
+        default=None,
+        description="Static purpose label for this Airman instance"
+        " - lower case alpha numeric with hyphens",
     )
 
     # DNS rebinding protection
@@ -1504,6 +1512,13 @@ Environment Variables:
         default=settings.allowed_origins,
         help="Comma-separated allowed Origin header values",
     )
+    parser.add_argument(
+        "--purpose",
+        type=str,
+        default=settings.purpose,
+        help="Static purpose label for governance tracing "
+        "(e.g. 'credit_scoring'). Enables governance features when set.",
+    )
     # Authentication arguments (delegated to auth_config)
     add_auth_cli_args(parser, settings)
 
@@ -1520,6 +1535,7 @@ Environment Variables:
     settings.dns_rebinding_protection = args.dns_rebinding_protection
     settings.allowed_hosts = args.allowed_hosts
     settings.allowed_origins = args.allowed_origins
+    settings.purpose = args.purpose
 
     # Auth CLI overrides (delegated to auth_config)
     apply_auth_cli_overrides(settings, args)
@@ -1573,6 +1589,10 @@ Environment Variables:
         f"Starting Pg Airman MCP Server in {current_access_mode.upper()} mode "
         f"with {tool_count} tools"
     )
+    if settings.purpose:
+        logger.info(f"Governance purpose: {settings.purpose}")
+    else:
+        logger.info("Governance purpose not set — governance tracing disabled")
 
     # Get database URL
     database_url = settings.database_url
