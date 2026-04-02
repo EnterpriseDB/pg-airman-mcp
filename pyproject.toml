@@ -111,5 +111,7 @@ constraint-dependencies = [
     "aiohttp>=3.13.3",          # CVE-2025-69223 through CVE-2025-69230 (via instructor)
     "cryptography>=46.0.6",     # BDSA-2026-5640
     "python-multipart>=0.0.22", # CVE-2026-24486 (via mcp)
+    "requests>=2.33.1",         # Stay current (via docker/instructor)
+    "setuptools>=82.0.0",       # GHSA-58pv-8j8x-9vj2, GHSA-8rrh-rw8j-w5fx (via pglast)
     "urllib3>=2.6.3",           # CVE-2026-21441 (via docker/requests)
 ]
