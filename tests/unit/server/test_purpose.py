@@ -210,10 +210,12 @@ class TestPurposeConnectionURL:
                     await main()
 
             # Verify pool_connect was called with the modified URL
+            # Format: airman:<purpose> (URL-encoded colon = %3A)
             call_args = mock_db.pool_connect.call_args
             url = call_args[0][0]
             assert (
-                url == "postgresql://localhost/testdb?application_name=credit-scoring"
+                url
+                == "postgresql://localhost/testdb?application_name=airman%3Acredit-scoring"
             )
 
     @pytest.mark.asyncio
@@ -258,10 +260,11 @@ class TestPurposeConnectionURL:
                 with pytest.raises(SystemExit):
                     await main()
 
+            # Format: airman:<purpose> (URL-encoded colon = %3A)
             url = mock_db.pool_connect.call_args[0][0]
             assert url == (
                 "postgresql://localhost/testdb"
-                "?sslmode=require&application_name=credit-scoring"
+                "?sslmode=require&application_name=airman%3Acredit-scoring"
             )
 
     @pytest.mark.asyncio
@@ -343,8 +346,8 @@ class TestPurposeConnectionURL:
                 with pytest.raises(SystemExit):
                     await main()
 
-            # Verify quote() was called with the purpose value
-            mock_quote.assert_called_once_with("app-v2")
+            # Verify quote() was called with the airman-prefixed purpose value
+            mock_quote.assert_called_once_with("airman:app-v2")
             url = mock_db.pool_connect.call_args[0][0]
             assert "application_name=app-v2" in url
 
