@@ -497,11 +497,46 @@ The purpose value must be lowercase alphanumeric with hyphens only (e.g., `credi
 
 #### How It Works
 
-When a purpose is configured, every database connection from this Airman instance includes it in the `application_name` connection parameter. Database administrators can then:
+When a purpose is configured, every database connection from this Airman instance sets `application_name` to `airman:<purpose>` (e.g., `airman:credit-scoring`). Database administrators can then:
 
 - Filter `pg_stat_activity` by `application_name` to see active connections by purpose
 - Configure PostgreSQL logging to include `application_name` for audit trails
 - Set up monitoring alerts based on connection purposes
+
+### Session Token Tracing
+
+The tracing feature propagates session identifiers from MCP clients through to PostgreSQL, enabling end-to-end request tracing across your AI agent infrastructure.
+
+#### Enabling Session Token Tracing
+
+Enable tracing via environment variable or CLI argument:
+
+```bash
+AIRMAN_MCP_TRACING=true
+```
+
+Or via CLI:
+
+```bash
+pg-airman-mcp "postgresql://..." --tracing
+```
+
+#### How It Works
+
+When tracing is enabled, the MCP server extracts the session identifier from the `_meta.sessionId` field in MCP tool calls and sets it as the PostgreSQL `application_name` for that transaction using `SET LOCAL`. This allows you to correlate database activity with specific MCP sessions.
+
+The `application_name` format is `airman:<purpose>/<session-short>`, where session is truncated to 8 characters (like git short hashes):
+
+- **Tracing only**: `airman:_/91c11602`
+- **Both purpose and tracing**: `airman:credit-scoring/91c11602`
+
+This format preserves the app identity (`airman`) for monitoring tools while providing purpose and session correlation.
+
+#### Use Cases
+
+- **Request tracing**: Correlate slow queries in `pg_stat_activity` back to specific MCP sessions
+- **Audit logging**: Track which AI agent session executed each database operation
+- **Debugging**: Identify the source of problematic queries in multi-tenant environments
 
 ## Postgres Extension Installation (Optional)
 
@@ -655,6 +690,7 @@ Environment variables use the `AIRMAN_MCP_` prefix.
 | `AIRMAN_MCP_DNS_REBINDING_PROTECTION` | `--dns-rebinding-protection` | Enable DNS rebinding protection | `false` |
 | `AIRMAN_MCP_ALLOWED_HOSTS` | `--allowed-hosts` | Comma-separated allowed Host header values | *(empty)* |
 | `AIRMAN_MCP_PURPOSE` | `--purpose` | Static purpose label for governance logging | *(none)* |
+| `AIRMAN_MCP_TRACING` | `--tracing` | Enable session token tracing via application_name | `false` |
 | `AIRMAN_MCP_ALLOWED_ORIGINS` | `--allowed-origins` | Comma-separated allowed Origin header values | *(empty)* |
 
 ### Authentication Settings
