@@ -10,7 +10,12 @@ from .extension_utils import (
 )
 from .index import IndexDefinition
 from .safe_sql import SafeSqlDriver, execute_comment_on
-from .sql_driver import DbConnPool, SqlDriver, obfuscate_password
+from .sql_driver import (
+    DbConnPool,
+    SqlDriver,
+    obfuscate_password,
+    tracing_application_name,
+)
 
 __all__ = [
     "ColumnCollector",
@@ -27,4 +32,5 @@ __all__ = [
     "get_postgres_version",
     "obfuscate_password",
     "reset_postgres_version_cache",
+    "tracing_application_name",
 ]

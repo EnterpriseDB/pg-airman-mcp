@@ -69,6 +69,8 @@ import re
 import signal
 import sys
 import threading
+import uuid
+from collections.abc import Sequence
 from enum import Enum
 from typing import Any, Literal
 from urllib.parse import quote
@@ -113,6 +115,7 @@ from .sql import (
     check_hypopg_installation_status,
     execute_comment_on,
     obfuscate_password,
+    tracing_application_name,
 )
 from .top_queries import TopQueriesCalc
 
@@ -247,6 +250,11 @@ class ServerSettings(BaseSettings):
         description="Static purpose label for this Airman instance"
         " - lower case alpha numeric with hyphens",
     )
+    tracing: bool = Field(
+        default=False,
+        description="Enable session token tracing. Extracts token from "
+        "MCP _meta and sets application_name per transaction via SET LOCAL.",
+    )
 
     # DNS rebinding protection
     dns_rebinding_protection: bool = Field(
@@ -368,9 +376,62 @@ is_stdio_transport = False
 shutdown_event = threading.Event()
 
 
+class AirmanFastMCP(FastMCP):
+    """FastMCP subclass that injects session token tracing per request.
+
+    Overrides call_tool() to extract a session token from the MCP _meta
+    parameter, compose it with the static purpose (if set), and store
+    the result in a ContextVar for the SQL layer to pick up via
+    SET LOCAL application_name.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        purpose: str | None = None,
+        fallback_token: str | None = None,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self._purpose = purpose
+        self._fallback_token = fallback_token or str(uuid.uuid4())
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any]
+    ) -> Sequence[types.ContentBlock] | dict[str, Any]:
+        """Override to inject tracing token into ContextVar before tool execution."""
+        # Extract session token from _meta if available
+        token = self._fallback_token
+        try:
+            ctx = self.get_context()
+            meta = ctx.request_context.meta
+            if meta is not None and meta.model_extra:
+                token = meta.model_extra.get("sessionId", token)
+        except Exception:
+            # If context is unavailable, use fallback token
+            pass
+
+        # Compose application_name: airman:<purpose>/<session-short>
+        # Session truncated to first 8 chars (like git short hashes)
+        session_short = str(token)[:8]
+        if self._purpose:
+            app_name = f"airman:{self._purpose}/{session_short}"
+        else:
+            app_name = f"airman:_/{session_short}"
+
+        # Store in ContextVar for SQL layer to read
+        reset_token = tracing_application_name.set(app_name)
+        try:
+            return await super().call_tool(name, arguments)
+        finally:
+            tracing_application_name.reset(reset_token)
+
+
 def create_mcp_server(
     auth_context: AuthContext | None = None,
     transport_security: TransportSecuritySettings | None = None,
+    tracing: bool = False,
+    purpose: str | None = None,
 ) -> FastMCP:
     """
     Create FastMCP server with optional OAuth authentication.
@@ -384,6 +445,8 @@ def create_mcp_server(
             If None, server runs without authentication.
         transport_security: DNS rebinding protection settings.
             If None, FastMCP applies its defaults (protection for localhost).
+        tracing: Enable session token tracing via AirmanFastMCP subclass.
+        purpose: Static purpose label, composed with token when tracing.
 
     Returns:
         Configured FastMCP server instance with all tools registered
@@ -393,17 +456,32 @@ def create_mcp_server(
     global _auth_context
     _auth_context = auth_context
 
+    # Choose server class: AirmanFastMCP when tracing, plain FastMCP otherwise
+    server_cls: type[FastMCP] = AirmanFastMCP if tracing else FastMCP
+    extra_kwargs: dict[str, Any] = {}
+    if tracing:
+        extra_kwargs["purpose"] = purpose
+        logger.info(
+            f"Session token tracing ENABLED "
+            f"(purpose={purpose or 'none'}, using AirmanFastMCP)"
+        )
+
     if auth_context is None:
         # Create unauthenticated server
         logger.info("Authentication DISABLED - all tools are unprotected")
-        server = FastMCP("pg-airman-mcp", transport_security=transport_security)
+        server = server_cls(
+            "pg-airman-mcp",
+            transport_security=transport_security,
+            **extra_kwargs,
+        )
     else:
         # Create authenticated FastMCP instance
-        server = FastMCP(
+        server = server_cls(
             "pg-airman-mcp",
             token_verifier=auth_context.token_verifier,
             auth=auth_context.auth_settings,
             transport_security=transport_security,
+            **extra_kwargs,
         )
 
     # Register all tools on the server (works for both auth and no-auth)
@@ -1535,6 +1613,13 @@ Environment Variables:
         help="Static purpose label (e.g. 'credit-scoring'). "
         "Sets application_name in PostgreSQL when set.",
     )
+    parser.add_argument(
+        "--tracing",
+        action=argparse.BooleanOptionalAction,
+        default=settings.tracing,
+        help="Enable session token tracing. Extracts token from MCP _meta "
+        "and sets application_name per transaction via SET LOCAL.",
+    )
     # Authentication arguments (delegated to auth_config)
     add_auth_cli_args(parser, settings)
 
@@ -1557,6 +1642,7 @@ Environment Variables:
             f"(e.g. 'credit-scoring'), got: {args.purpose!r}"
         )
     settings.purpose = args.purpose
+    settings.tracing = args.tracing
 
     # Auth CLI overrides (delegated to auth_config)
     apply_auth_cli_overrides(settings, args)
@@ -1593,6 +1679,8 @@ Environment Variables:
     mcp = create_mcp_server(
         auth_context=auth_context,
         transport_security=transport_security,
+        tracing=settings.tracing,
+        purpose=settings.purpose,
     )
 
     # Store the access mode in the global variable
@@ -1620,14 +1708,16 @@ Environment Variables:
         )
 
     # Append application_name to connection URL when purpose is set
+    # Format: airman:<purpose> (will be overridden by SET LOCAL if tracing enabled)
     if settings.purpose:
         separator = "&" if "?" in database_url else "?"
+        app_name_value = f"airman:{settings.purpose}"
         database_url = (
-            f"{database_url}{separator}application_name={quote(settings.purpose)}"
+            f"{database_url}{separator}application_name={quote(app_name_value)}"
         )
         logger.info(
             f"Purpose '{settings.purpose}' set — "
-            f"application_name injected into connection URL"
+            f"application_name '{app_name_value}' injected into connection URL"
         )
 
     # Initialize database connection pool

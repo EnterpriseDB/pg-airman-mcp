@@ -1,15 +1,23 @@
 """SQL driver adapter for PostgreSQL connections."""
 
+import contextvars
 import logging
 import re
 from dataclasses import dataclass
 from typing import Any, LiteralString
 from urllib.parse import urlparse, urlunparse
 
+from psycopg import sql as psycopg_sql
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 logger = logging.getLogger(__name__)
+
+# ContextVar for session token tracing. Set per-request by AirmanFastMCP.call_tool(),
+# read by _execute_with_connection() to issue SET LOCAL application_name.
+tracing_application_name: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "tracing_application_name", default=None
+)
 
 
 def obfuscate_password(text: str | None) -> str | None:
@@ -240,6 +248,15 @@ class SqlDriver:
                 if force_readonly:
                     await cursor.execute("BEGIN TRANSACTION READ ONLY")
                     transaction_started = True
+
+                # Inject SET LOCAL application_name for session tracing
+                app_name = tracing_application_name.get()
+                if app_name is not None:
+                    await cursor.execute(
+                        psycopg_sql.SQL("SET LOCAL application_name = {}").format(
+                            psycopg_sql.Literal(app_name)
+                        )
+                    )
 
                 if params:
                     await cursor.execute(query, params)
