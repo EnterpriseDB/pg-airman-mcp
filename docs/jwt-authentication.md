@@ -112,6 +112,17 @@ AIRMAN_MCP_JWT_AUDIENCE=<application-client-id>
 
 ## Security Considerations
 
+### Resource Validation vs Audience
+
+The `--auth-validate-resource` flag (RFC 8707 resource validation) is **not compatible** with JWT authentication. If you attempt to use both, the server will reject the configuration at startup:
+
+```text
+ValueError: --auth-validate-resource cannot be used with --auth-type=jwt.
+JWT uses audience validation instead (--jwt-audience).
+```
+
+**Why?** In introspection mode, resource validation checks that the token was issued for a specific resource server. In JWT mode, the `aud` (audience) claim serves the same purpose — it identifies the intended recipient of the token. Use `--jwt-audience` to specify the expected audience.
+
 ### Algorithm Restrictions
 
 Only asymmetric signing algorithms are accepted:

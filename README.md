@@ -501,6 +501,7 @@ The server URL is auto-detected from the host and port configuration for SSE and
 - **JWKS caching** (JWT): Public keys are cached with a configurable TTL (default: 5 minutes) and rate-limited refresh on unknown key IDs.
 - **RFC 8707 resource validation**: Optionally validates that the token's resource claim matches the MCP server URL.
 - **Scope validation**: Requires tokens to have the configured scopes (default: `mcp:postgres:access`).
+- **Semantic alias role switching**: The `execute_alias` tool accepts an optional `execute_as_role` parameter that is passed to AIDB. Role switching requires the connecting database user to have `SET ROLE` privileges for the target role. The parameter is SQL-injection safe (parameterized), but operators should ensure proper database grants to control which roles can be assumed.
 
 ## Governance
 
@@ -652,7 +653,7 @@ Pg Airman MCP Tools:
 | `create_alias` | Create a reusable semantic alias — a parameterized SQL query with semantic description for discovery. Requires `kb_name` to resolve the embedding model so the alias is searchable. Allowed in restricted mode only if `ALLOW_ALIAS_WRITE_IN_RESTRICTED=true`. |
 | `delete_alias` | Delete a semantic alias (allowed in restricted mode only if `ALLOW_ALIAS_WRITE_IN_RESTRICTED=true`). |
 | `search_aliases` | Search semantic aliases by natural language query using the embedding model from the given `kb_name`. |
-| `execute_alias` | Execute a semantic alias with parameter values. |
+| `execute_alias` | Execute a semantic alias with parameter values. Supports optional `execute_as_role` for role-based access control (requires database grants). |
 | `list_aliases` | List all available semantic aliases with name, description, query text, and parameter count. |
 | `discover_context` | Discover schema metadata and existing aliases relevant to a business question in a single call (for SQL generation). Combines `search_kb` and `search_aliases` with configurable similarity threshold and result limits. |
 
