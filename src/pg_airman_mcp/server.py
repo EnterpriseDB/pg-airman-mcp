@@ -65,11 +65,13 @@ See main() function for complete CLI argument documentation.
 import argparse
 import asyncio
 import logging
+import re
 import signal
 import sys
 import threading
 from enum import Enum
 from typing import Any, Literal
+from urllib.parse import quote
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -120,6 +122,7 @@ mcp: FastMCP
 
 # Constants
 PG_STAT_STATEMENTS = "pg_stat_statements"
+_PURPOSE_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 HYPOPG_EXTENSION = "hypopg"
 
 ResponseType = list[types.TextContent | types.ImageContent | types.EmbeddedResource]
@@ -277,6 +280,19 @@ class ServerSettings(BaseSettings):
         if v.lower() not in allowed:
             raise ValueError(f"transport must be one of {allowed}, got: {v}")
         return v.lower()
+
+    @field_validator("purpose")
+    @classmethod
+    def validate_purpose(cls, v: str | None) -> str | None:
+        """Validate purpose is lowercase alphanumeric with hyphens."""
+        if v is None:
+            return None
+        if not _PURPOSE_PATTERN.fullmatch(v):
+            raise ValueError(
+                "purpose must be lowercase alphanumeric with hyphens "
+                f"(e.g. 'credit-scoring'), got: {v!r}"
+            )
+        return v
 
     def get_required_scopes(self) -> list[str]:
         """Parse required scopes from comma-separated string."""
@@ -1516,8 +1532,8 @@ Environment Variables:
         "--purpose",
         type=str,
         default=settings.purpose,
-        help="Static purpose label for governance tracing "
-        "(e.g. 'credit_scoring'). Enables governance features when set.",
+        help="Static purpose label (e.g. 'credit-scoring'). "
+        "Sets application_name in PostgreSQL when set.",
     )
     # Authentication arguments (delegated to auth_config)
     add_auth_cli_args(parser, settings)
@@ -1535,6 +1551,11 @@ Environment Variables:
     settings.dns_rebinding_protection = args.dns_rebinding_protection
     settings.allowed_hosts = args.allowed_hosts
     settings.allowed_origins = args.allowed_origins
+    if args.purpose is not None and not _PURPOSE_PATTERN.fullmatch(args.purpose):
+        raise ValueError(
+            "purpose must be lowercase alphanumeric with hyphens "
+            f"(e.g. 'credit-scoring'), got: {args.purpose!r}"
+        )
     settings.purpose = args.purpose
 
     # Auth CLI overrides (delegated to auth_config)
@@ -1589,11 +1610,6 @@ Environment Variables:
         f"Starting Pg Airman MCP Server in {current_access_mode.upper()} mode "
         f"with {tool_count} tools"
     )
-    if settings.purpose:
-        logger.info(f"Governance purpose: {settings.purpose}")
-    else:
-        logger.info("Governance purpose not set — governance tracing disabled")
-
     # Get database URL
     database_url = settings.database_url
 
@@ -1601,6 +1617,17 @@ Environment Variables:
         raise ValueError(
             "Error: No database URL provided. Please specify via "
             "AIRMAN_MCP_DATABASE_URL environment variable or command-line argument."
+        )
+
+    # Append application_name to connection URL when purpose is set
+    if settings.purpose:
+        separator = "&" if "?" in database_url else "?"
+        database_url = (
+            f"{database_url}{separator}application_name={quote(settings.purpose)}"
+        )
+        logger.info(
+            f"Purpose '{settings.purpose}' set — "
+            f"application_name injected into connection URL"
         )
 
     # Initialize database connection pool
