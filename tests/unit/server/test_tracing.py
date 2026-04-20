@@ -1,11 +1,13 @@
-"""Unit tests for session token tracing (POS-93).
+"""Unit tests for session token tracing (POS-93, POS-96).
 
 Tests cover:
 - ServerSettings.tracing field defaults and env var
 - --tracing / --no-tracing CLI argument handling
 - AirmanFastMCP.call_tool() token extraction and ContextVar management
 - create_mcp_server() class selection based on tracing flag
-- SET LOCAL application_name injection in sql_driver._execute_with_connection()
+- SET application_name injection in sql_driver._execute_with_connection()
+  (session-level via autocommit, not SET LOCAL)
+- Null sessionId handling (fallback to generated UUID)
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -416,6 +418,34 @@ class TestAirmanFastMCPCallTool:
         # Format: airman:_/<session-short> (8-char truncation of fallback-uuid)
         assert captured["app_name"] == "airman:_/fallback"
 
+    @pytest.mark.asyncio
+    async def test_null_session_id_uses_fallback(self):
+        """Fallback token is used when sessionId is explicitly None."""
+        server = AirmanFastMCP("test-server", fallback_token="fallback-uuid")
+
+        mock_meta = MagicMock()
+        mock_meta.model_extra = {"sessionId": None}
+        mock_request_context = MagicMock()
+        mock_request_context.meta = mock_meta
+        mock_ctx = MagicMock()
+        mock_ctx.request_context = mock_request_context
+
+        captured: dict[str, str | None] = {}
+
+        async def capture_contextvar(*args, **kwargs):
+            captured["app_name"] = tracing_application_name.get()
+            return []
+
+        with (
+            patch.object(AirmanFastMCP, "get_context", return_value=mock_ctx),
+            patch.object(FastMCP, "call_tool", new_callable=AsyncMock) as mock_super,
+        ):
+            mock_super.side_effect = capture_contextvar
+            await server.call_tool("test_tool", {})
+
+        # sessionId=None should fall back, not produce "airman:_/None"
+        assert captured["app_name"] == "airman:_/fallback"
+
     def test_default_fallback_token_is_uuid(self):
         """Fallback token is a UUID when not explicitly provided."""
         import uuid
@@ -462,8 +492,12 @@ class TestCreateMcpServerTracing:
         ), f"Expected tracing log message, got: {log_messages}"
 
 
-class TestSetLocalApplicationName:
-    """Test SET LOCAL application_name injection in sql_driver."""
+class TestSetApplicationName:
+    """Test SET application_name injection in sql_driver.
+
+    The SET runs on the connection via autocommit (not on the cursor,
+    not inside a transaction) so it persists as a session-level setting.
+    """
 
     @pytest.fixture(autouse=True)
     def _reset_contextvar(self):
@@ -485,6 +519,8 @@ class TestSetLocalApplicationName:
 
         mock_conn = AsyncMock()
         mock_conn.cursor = MagicMock(return_value=mock_cursor)
+        mock_conn.execute = AsyncMock()
+        mock_conn.set_autocommit = AsyncMock()
         mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
         mock_conn.__aexit__ = AsyncMock(return_value=False)
 
@@ -495,58 +531,76 @@ class TestSetLocalApplicationName:
         pool.pool = mock_pool_obj  # satisfy pool_connect() truthy check
         pool._is_valid = True  # type: ignore[reportPrivateUsage]  # skip reconnection logic
 
-        return pool, mock_cursor
+        return pool, mock_conn, mock_cursor
 
     @pytest.mark.asyncio
-    async def test_set_local_when_contextvar_set(self):
-        """SET LOCAL application_name is issued when ContextVar is set."""
-        pool, mock_cursor = self._make_mock_pool()
+    async def test_set_application_name_when_contextvar_set(self):
+        """SET application_name is issued on connection when ContextVar is set."""
+        pool, mock_conn, _mock_cursor = self._make_mock_pool()
         driver = SqlDriver(conn=pool)
 
         tracing_application_name.set("test-token")
 
         await driver.execute_query("SELECT 1")
 
-        # Find the SET LOCAL call among cursor.execute calls
-        execute_calls = [str(call) for call in mock_cursor.execute.call_args_list]
-        assert any(
-            "SET LOCAL" in call and "application_name" in call for call in execute_calls
-        ), f"Expected SET LOCAL call, got: {execute_calls}"
+        # SET runs on connection (not cursor) via autocommit
+        conn_execute_calls = [str(call) for call in mock_conn.execute.call_args_list]
+        assert any("SET application_name" in call for call in conn_execute_calls), (
+            f"Expected SET application_name on connection, got: {conn_execute_calls}"
+        )
 
     @pytest.mark.asyncio
-    async def test_no_set_local_when_contextvar_is_none(self):
-        """No SET LOCAL is issued when ContextVar is None (default)."""
-        pool, mock_cursor = self._make_mock_pool()
+    async def test_autocommit_enabled_for_set(self):
+        """Autocommit is enabled before SET and disabled after."""
+        pool, mock_conn, _mock_cursor = self._make_mock_pool()
+        driver = SqlDriver(conn=pool)
+
+        tracing_application_name.set("test-token")
+
+        await driver.execute_query("SELECT 1")
+
+        # Check autocommit calls: True before SET, False after
+        autocommit_calls = [
+            call[0][0] for call in mock_conn.set_autocommit.call_args_list
+        ]
+        assert autocommit_calls == [True, False], (
+            f"Expected [True, False] autocommit sequence, got: {autocommit_calls}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_set_when_contextvar_is_none(self):
+        """No SET is issued when ContextVar is None (default)."""
+        pool, mock_conn, _mock_cursor = self._make_mock_pool()
         driver = SqlDriver(conn=pool)
 
         # ContextVar default is None — no need to set it
         await driver.execute_query("SELECT 1")
 
-        execute_calls = [str(call) for call in mock_cursor.execute.call_args_list]
-        assert not any("SET LOCAL" in call for call in execute_calls), (
-            f"Unexpected SET LOCAL call in: {execute_calls}"
+        conn_execute_calls = [str(call) for call in mock_conn.execute.call_args_list]
+        assert not any("SET application_name" in call for call in conn_execute_calls), (
+            f"Unexpected SET application_name in: {conn_execute_calls}"
         )
+        # Autocommit should not be toggled
+        assert mock_conn.set_autocommit.call_count == 0
 
     @pytest.mark.asyncio
-    async def test_set_local_uses_literal_for_safety(self):
-        """SET LOCAL uses psycopg SQL.Literal for safe parameterization."""
-        pool, mock_cursor = self._make_mock_pool()
+    async def test_set_uses_literal_for_safety(self):
+        """SET uses psycopg SQL.Literal for safe parameterization."""
+        pool, mock_conn, _mock_cursor = self._make_mock_pool()
         driver = SqlDriver(conn=pool)
 
         tracing_application_name.set("token-with-special")
 
         await driver.execute_query("SELECT 1")
 
-        # The first execute call (or second if force_readonly) should be
-        # a Composed SQL object, not a raw string — verifying safe injection
-        set_local_calls = [
+        set_calls = [
             call
-            for call in mock_cursor.execute.call_args_list
-            if "SET LOCAL" in str(call)
+            for call in mock_conn.execute.call_args_list
+            if "SET application_name" in str(call)
         ]
-        assert len(set_local_calls) == 1
+        assert len(set_calls) == 1
         # The argument should be a psycopg sql.Composed object, not a string
-        sql_arg = set_local_calls[0][0][0]
+        sql_arg = set_calls[0][0][0]
         assert not isinstance(sql_arg, str), (
-            "SET LOCAL should use psycopg sql.SQL, not a raw string"
+            "SET should use psycopg sql.SQL, not a raw string"
         )
