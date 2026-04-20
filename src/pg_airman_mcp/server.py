@@ -1814,8 +1814,13 @@ Environment Variables:
         #    ensures the server stays alive until explicitly signaled.
         # The asyncio.sleep(0.1) prevents a tight loop if transport methods
         # return immediately, while still checking shutdown_event frequently.
+        # For stdio: run_stdio_async() returns when stdin is closed (parent
+        # disconnected), which is the natural shutdown signal — break immediately
+        # rather than retrying on a closed file descriptor.
         while not shutdown_event.is_set():
             await _run_transport(settings)
+            if settings.transport == "stdio":
+                break
             await asyncio.sleep(0.1)
         logger.info("Shutdown requested, cleaning up...")
         await shutdown()
