@@ -14,7 +14,7 @@ from psycopg_pool import AsyncConnectionPool
 logger = logging.getLogger(__name__)
 
 # ContextVar for session token tracing. Set per-request by AirmanFastMCP.call_tool(),
-# read by _execute_with_connection() to issue SET LOCAL application_name.
+# read by _execute_with_connection() to issue SET application_name (session-level).
 tracing_application_name: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "tracing_application_name", default=None
 )
@@ -243,20 +243,26 @@ class SqlDriver:
         """Execute query with the given connection."""
         transaction_started = False
         try:
+            # Inject SET application_name outside any transaction so it
+            # persists as a true session-level setting. SET inside a
+            # transaction is reverted by ROLLBACK, which defeats
+            # persistence on idle connections in pg_stat_activity.
+            # Uses autocommit to avoid psycopg's implicit transaction.
+            app_name = tracing_application_name.get()
+            if app_name is not None:
+                await connection.set_autocommit(True)
+                await connection.execute(
+                    psycopg_sql.SQL("SET application_name = {}").format(
+                        psycopg_sql.Literal(app_name)
+                    )
+                )
+                await connection.set_autocommit(False)
+
             async with connection.cursor(row_factory=dict_row) as cursor:
                 # Start read-only transaction
                 if force_readonly:
                     await cursor.execute("BEGIN TRANSACTION READ ONLY")
                     transaction_started = True
-
-                # Inject SET LOCAL application_name for session tracing
-                app_name = tracing_application_name.get()
-                if app_name is not None:
-                    await cursor.execute(
-                        psycopg_sql.SQL("SET LOCAL application_name = {}").format(
-                            psycopg_sql.Literal(app_name)
-                        )
-                    )
 
                 if params:
                     await cursor.execute(query, params)

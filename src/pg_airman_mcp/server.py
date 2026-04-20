@@ -438,7 +438,7 @@ class AirmanFastMCP(FastMCP):
     Overrides call_tool() to extract a session token from the MCP _meta
     parameter, compose it with the static purpose (if set), and store
     the result in a ContextVar for the SQL layer to pick up via
-    SET LOCAL application_name.
+    SET application_name (session-level).
     """
 
     def __init__(
@@ -458,18 +458,24 @@ class AirmanFastMCP(FastMCP):
         """Override to inject tracing token into ContextVar before tool execution."""
         # Extract session token from _meta if available
         token = self._fallback_token
+        source = "fallback"
         try:
             ctx = self.get_context()
             meta = ctx.request_context.meta
             if meta is not None and meta.model_extra:
-                token = meta.model_extra.get("sessionId", token)
+                sid = meta.model_extra.get("sessionId")
+                if sid:
+                    token = sid
+                    source = "_meta"
         except Exception:
-            # If context is unavailable, use fallback token
             pass
 
         # Compose application_name: airman:<purpose>/<session-short>
         # Session truncated to first 8 chars (like git short hashes)
         session_short = str(token)[:8]
+        logger.info(
+            "Tracing: tool=%s session=%s source=%s", name, session_short, source
+        )
         if self._purpose:
             app_name = f"airman:{self._purpose}/{session_short}"
         else:
