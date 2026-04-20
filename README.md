@@ -557,7 +557,9 @@ pg-airman-mcp "postgresql://..." --tracing
 
 #### How It Works
 
-When tracing is enabled, the MCP server extracts the session identifier from the `_meta.sessionId` field in MCP tool calls and sets it as the PostgreSQL `application_name` for that transaction using `SET LOCAL`. This allows you to correlate database activity with specific MCP sessions.
+When tracing is enabled, the MCP server extracts the session identifier from the `_meta.sessionId` field in MCP tool calls and sets `application_name` at the PostgreSQL session level using `SET` (outside any transaction, via autocommit). This ensures the session token is visible in `pg_stat_activity` both during query execution and on idle connections.
+
+If no `_meta.sessionId` is provided by the MCP client, Airman generates a fallback UUID at startup and uses that instead. The debug log indicates the source: `source=_meta` when received from the client, `source=fallback` when auto-generated.
 
 The `application_name` format is `airman:<purpose>/<session-short>`, where session is truncated to 8 characters (like git short hashes):
 
@@ -566,11 +568,26 @@ The `application_name` format is `airman:<purpose>/<session-short>`, where sessi
 
 This format preserves the app identity (`airman`) for monitoring tools while providing purpose and session correlation.
 
+#### Visibility in PostgreSQL
+
+| Surface | Token visible? | Notes |
+|---|---|---|
+| `pg_stat_activity` (active query) | Yes | Shows `airman:<purpose>/<session-short>` with the running query |
+| `pg_stat_activity` (idle connection) | Yes | Token persists after query completes |
+| JSON logs (`log_destination=jsonlog`) | Yes | `application_name` field on every logged statement |
+| CSV logs (`log_destination=csvlog`) | Yes | `application_name` is always a column |
+| stderr logs | Only if `%a` is in `log_line_prefix` | Add `%a` to include `application_name` |
+
+#### Connection Pool Behavior
+
+Airman uses a connection pool (`min_size=1, max_size=5`). The session token is applied per-connection on the first tool call that uses it. Connections that have not yet executed a tool call (e.g. the initial pool health-check connection) will show the baseline `airman:<purpose>` without the session token suffix. After a connection executes its first tool call, the token persists on that connection for all subsequent queries and remains visible when idle.
+
 #### Use Cases
 
 - **Request tracing**: Correlate slow queries in `pg_stat_activity` back to specific MCP sessions
 - **Audit logging**: Track which AI agent session executed each database operation
 - **Debugging**: Identify the source of problematic queries in multi-tenant environments
+- **Audit trail**: JSON/CSV logs record which session ran each query, useful for compliance reviews and incident investigation
 
 ## Postgres Extension Installation (Optional)
 
