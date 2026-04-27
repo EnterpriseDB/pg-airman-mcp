@@ -299,7 +299,8 @@ class ServerSettings(BaseSettings):
     tracing: bool = Field(
         default=False,
         description="Enable session token tracing. Extracts token from "
-        "MCP _meta and sets application_name per transaction via SET LOCAL.",
+        "MCP _meta and sets application_name at session level via "
+        "autocommit SET so it persists on idle pool connections.",
     )
 
     # DNS rebinding protection
@@ -1779,7 +1780,8 @@ Environment Variables:
         )
 
     # Append application_name to connection URL when purpose is set
-    # Format: airman:<purpose> (will be overridden by SET LOCAL if tracing enabled)
+    # Format: airman:<purpose> (overridden at session level by autocommit SET if
+    # tracing enabled — see SqlDriver/SafeSqlDriver acquisition path)
     if settings.purpose:
         separator = "&" if "?" in database_url else "?"
         app_name_value = f"airman:{settings.purpose}"
