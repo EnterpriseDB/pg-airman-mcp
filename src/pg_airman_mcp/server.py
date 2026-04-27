@@ -128,6 +128,10 @@ mcp: FastMCP
 # Constants
 PG_STAT_STATEMENTS = "pg_stat_statements"
 _PURPOSE_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+# PostgreSQL truncates application_name at NAMEDATALEN-1 (63 bytes).
+# Composed format is "airman:<purpose>/<sid8>" — fixed overhead is 16 bytes
+# ("airman:" + "/" + 8-char session prefix), leaving 47 bytes for purpose.
+_PURPOSE_MAX_LEN = 47
 HYPOPG_EXTENSION = "hypopg"
 
 ResponseType = list[types.TextContent | types.ImageContent | types.EmbeddedResource]
@@ -193,7 +197,11 @@ class ServerSettings(BaseSettings):
         print(settings.database_url)
     """
 
-    model_config = SettingsConfigDict(env_prefix="AIRMAN_MCP_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="AIRMAN_MCP_",
+        case_sensitive=False,
+        validate_assignment=True,
+    )
 
     # Database configuration
     database_url: str | None = Field(
@@ -339,13 +347,18 @@ class ServerSettings(BaseSettings):
     @field_validator("purpose")
     @classmethod
     def validate_purpose(cls, v: str | None) -> str | None:
-        """Validate purpose is lowercase alphanumeric with hyphens."""
+        """Validate purpose is lowercase alphanumeric with hyphens, max 47 chars."""
         if v is None:
             return None
         if not _PURPOSE_PATTERN.fullmatch(v):
             raise ValueError(
                 "purpose must be lowercase alphanumeric with hyphens "
                 f"(e.g. 'credit-scoring'), got: {v!r}"
+            )
+        if len(v) > _PURPOSE_MAX_LEN:
+            raise ValueError(
+                f"purpose must be {_PURPOSE_MAX_LEN} characters or fewer to fit "
+                f"PostgreSQL's 63-byte application_name limit, got {len(v)}: {v!r}"
             )
         return v
 
@@ -1699,11 +1712,6 @@ Environment Variables:
     settings.dns_rebinding_protection = args.dns_rebinding_protection
     settings.allowed_hosts = args.allowed_hosts
     settings.allowed_origins = args.allowed_origins
-    if args.purpose is not None and not _PURPOSE_PATTERN.fullmatch(args.purpose):
-        raise ValueError(
-            "purpose must be lowercase alphanumeric with hyphens "
-            f"(e.g. 'credit-scoring'), got: {args.purpose!r}"
-        )
     settings.purpose = args.purpose
     settings.tracing = args.tracing
 
