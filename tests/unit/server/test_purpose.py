@@ -114,6 +114,24 @@ class TestPurposeValidator:
         with pytest.raises(ValidationError, match="purpose must be lowercase"):
             ServerSettings(purpose=value)
 
+    def test_valid_at_max_length(self):
+        """47-character purpose fits within PG's 63-byte application_name limit."""
+        value = "a" * 47
+        s = ServerSettings(purpose=value)
+        assert s.purpose == value
+
+    def test_invalid_over_max_length(self):
+        """48-character purpose is rejected to avoid pg_stat_activity truncation."""
+        with pytest.raises(ValidationError, match="47 characters or fewer.*63-byte"):
+            ServerSettings(purpose="a" * 48)
+
+    def test_max_length_keeps_application_name_within_63_bytes(self):
+        """Composed application_name at max purpose length fits PG's limit."""
+        purpose = "a" * 47
+        session_short = "12345678"
+        app_name = f"airman:{purpose}/{session_short}"
+        assert len(app_name) == 63
+
 
 class TestPurposeCLIArg:
     """Test --purpose CLI argument override in main()."""
