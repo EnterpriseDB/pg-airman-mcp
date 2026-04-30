@@ -16,6 +16,14 @@ jobs:
   pg-airman-mcp-ci:
     runs-on: ubuntu-latest
 
+    # Coverage comment step posts to the PR — needs pull-requests:write.
+    # Default GITHUB_TOKEN for dependabot-triggered runs is read-only, which
+    # caused every dependabot PR to show a red post-test step despite all
+    # tests passing.
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
