@@ -1,6 +1,6 @@
 [project]
 name = "pg-airman-mcp"
-version = "1.1.0"
+version = "1.1.1"
 description = "PostgreSQL Tuning and Analysis Tool"
 readme = "README.md"
 requires-python = ">=3.12"
